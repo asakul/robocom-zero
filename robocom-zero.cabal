@@ -1,0 +1,97 @@
+name:                robocom-zero
+version:             0.1.0.0
+-- synopsis:
+-- description:
+homepage:            https://github.com/asakul/robocom-zero#readme
+license:             BSD3
+license-file:        LICENSE
+author:              Denis Tereshkin
+maintainer:          denis@kasan.ws
+copyright:           2018 Denis Tereshkin
+category:            Web
+build-type:          Simple
+extra-source-files:  README.md
+cabal-version:       >=1.10
+
+library
+  hs-source-dirs:      src
+  ghc-options:         -Wall -fno-warn-orphans -Wno-type-defaults
+  exposed-modules:     ATrade.RoboCom.Indicators
+                     , ATrade.RoboCom.Monad
+                     , ATrade.RoboCom.Positions
+                     , ATrade.RoboCom.Types
+                     , ATrade.RoboCom.Utils
+                     , ATrade.Quotes.Finam
+                     , ATrade.Quotes.HAP
+                     , ATrade.Quotes.QHP
+                     , ATrade.Quotes.QTIS
+                     , ATrade.Driver.Real
+                     , ATrade.Driver.Backtest
+  build-depends:       base >= 4.7 && < 5
+                     , libatrade
+                     , text
+                     , text-icu
+                     , errors
+                     , lens
+                     , bytestring
+                     , cassava
+                     , containers
+                     , time
+                     , vector
+                     , wreq
+                     , safe
+                     , hslogger
+                     , parsec
+                     , parsec-numbers
+                     , aeson
+                     , binary
+                     , binary-ieee754
+                     , zeromq4-haskell
+                     , unordered-containers
+                     , ether
+                     , th-printf
+                     , BoundedChan
+                     , monad-loops
+                     , conduit
+                     , safe-exceptions
+                     , mtl
+                     , transformers
+                     , list-extras
+                     , optparse-applicative
+                     , split
+                     , signal
+                     , random
+                     , hedis
+
+  default-language:    Haskell2010
+  other-modules:       ATrade.BarAggregator
+                     , ATrade.Exceptions
+                     , ATrade.Driver.Real.BrokerClientThread
+                     , ATrade.Driver.Real.QuoteSourceThread
+                     , ATrade.Driver.Real.Types
+
+test-suite robots-test
+  type:                exitcode-stdio-1.0
+  hs-source-dirs:      test
+  main-is:             Spec.hs
+  build-depends:       base
+                     , robocom-zero
+                     , libatrade
+                     , time
+                     , text
+                     , tasty
+                     , tasty-hunit
+                     , tasty-golden
+                     , tasty-smallcheck
+                     , tasty-quickcheck
+                     , tasty-hspec
+                     , quickcheck-text
+                     , quickcheck-instances
+  ghc-options:         -threaded -rtsopts -with-rtsopts=-N
+  default-language:    Haskell2010
+  other-modules:     Test.RoboCom.Indicators
+                   , Test.RoboCom.Utils
+
+source-repository head
+  type:     git
+  location: https://github.com/asakul/robocom-zero
