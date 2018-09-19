@@ -5,23 +5,24 @@ module ATrade.Driver.Real.QuoteSourceThread
   startQuoteSourceThread
 ) where
 
-import ATrade.BarAggregator
-import ATrade.QuoteSource.Client
-import ATrade.RoboCom.Monad
-import ATrade.RoboCom.Types
-import ATrade.Types
-import ATrade.Driver.Real.Types
+import           ATrade.BarAggregator
+import           ATrade.Driver.Real.Types
+import           ATrade.QuoteSource.Client
+import           ATrade.RoboCom.Monad
+import           ATrade.RoboCom.Types
+import           ATrade.Types
 
-import Data.IORef
-import qualified Data.Text as T
+import           Data.IORef
+import qualified Data.Text                      as T
 
-import Control.Concurrent.BoundedChan
-import Control.Concurrent hiding (writeChan, readChan, writeList2Chan, yield)
-import Control.Exception
-import Control.Monad
+import           Control.Concurrent             hiding (readChan, writeChan,
+                                                 writeList2Chan, yield)
+import           Control.Concurrent.BoundedChan
+import           Control.Exception
+import           Control.Monad
 
-import System.Log.Logger
-import System.ZMQ4 hiding (Event)
+import           System.Log.Logger
+import           System.ZMQ4                    hiding (Event)
 
 startQuoteSourceThread :: Context -> T.Text -> Strategy c s -> BoundedChan Event -> IORef BarAggregator -> (Tick -> Bool) -> IO ThreadId
 startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter = forkIO $ do

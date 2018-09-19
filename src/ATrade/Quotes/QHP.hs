@@ -5,17 +5,17 @@ module ATrade.Quotes.QHP (
   Period(..),
   RequestParams(..)
   ) where
- 
-import ATrade.Types
-import Data.Aeson
-import qualified Data.Text as T
-import qualified Data.ByteString.Lazy as BL
-import Data.Binary.Get
-import Data.Binary.IEEE754
-import Data.Time.Calendar
-import Data.Time.Clock.POSIX
-import System.ZMQ4
-import System.Log.Logger
+
+import           ATrade.Types
+import           Data.Aeson
+import           Data.Binary.Get
+import           Data.Binary.IEEE754
+import qualified Data.ByteString.Lazy  as BL
+import qualified Data.Text             as T
+import           Data.Time.Calendar
+import           Data.Time.Clock.POSIX
+import           System.Log.Logger
+import           System.ZMQ4
 
 data Period =
   Period1Min  |
@@ -29,30 +29,30 @@ data Period =
   deriving (Eq)
 
 instance Show Period where
-  show Period1Min = "M1"
-  show Period5Min = "M5"
+  show Period1Min  = "M1"
+  show Period5Min  = "M5"
   show Period15Min = "M15"
   show Period30Min = "M30"
-  show PeriodHour = "H1"
-  show PeriodDay = "D"
-  show PeriodWeek = "W"
+  show PeriodHour  = "H1"
+  show PeriodDay   = "D"
+  show PeriodWeek  = "W"
   show PeriodMonth = "MN"
 
 data RequestParams =
   RequestParams
     {
-    endpoint :: T.Text,
-    ticker :: T.Text,
+    endpoint  :: T.Text,
+    ticker    :: T.Text,
     startDate :: Day,
-    endDate :: Day,
-    period :: Period
+    endDate   :: Day,
+    period    :: Period
     } deriving (Show, Eq)
-   
+
 instance ToJSON RequestParams where
   toJSON p = object [ "ticker" .= ticker p,
     "from" .= showGregorian (startDate p),
     "to" .=  showGregorian (endDate p),
-    "timeframe" .= show (period p) ] 
+    "timeframe" .= show (period p) ]
 
 getQuotes :: Context -> RequestParams -> IO [Bar]
 getQuotes ctx params =
@@ -70,7 +70,7 @@ getQuotes ctx params =
 parseBars :: TickerId -> BL.ByteString -> [Bar]
 parseBars tickerId input =
   case runGetOrFail parseBar input of
-    Left _ -> []
+    Left _               -> []
     Right (rest, _, bar) -> bar : parseBars tickerId rest
   where
     parseBar = do

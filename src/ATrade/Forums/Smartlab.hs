@@ -8,32 +8,32 @@ module ATrade.Forums.Smartlab (
 ) where
 
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.Text as T
-import Data.Text.Encoding
-import qualified Data.List as L
-import Data.Time.Calendar
-import Data.Time.Clock
-import Data.Maybe
-import Network.HTTP.Simple
-import Safe
-import Text.HTML.TagSoup
-import Text.Parsec
-import Text.Parsec.Text
-import Text.StringLike
+import qualified Data.List            as L
+import           Data.Maybe
+import qualified Data.Text            as T
+import           Data.Text.Encoding
+import           Data.Time.Calendar
+import           Data.Time.Clock
+import           Network.HTTP.Simple
+import           Safe
+import           Text.HTML.TagSoup
+import           Text.Parsec
+import           Text.Parsec.Text
+import           Text.StringLike
 
-import Debug.Trace
+import           Debug.Trace
 
 data NewsItem = NewsItem {
-  niUrl :: !T.Text,
-  niHeader :: !T.Text,
-  niText :: !T.Text,
-  niAuthor :: !T.Text,
+  niUrl     :: !T.Text,
+  niHeader  :: !T.Text,
+  niText    :: !T.Text,
+  niAuthor  :: !T.Text,
   niPubTime :: !UTCTime
 } deriving (Show, Eq)
 
 data IndexItem = IndexItem {
-  iiUrl :: !T.Text,
-  iiTitle :: !T.Text,
+  iiUrl     :: !T.Text,
+  iiTitle   :: !T.Text,
   iiPubTime :: !UTCTime
 } deriving (Show, Eq)
 
@@ -49,14 +49,14 @@ extractBetween tagName = takeWhile (~/= closeTag) . dropWhile (~/= openTag)
 matchClass :: T.Text -> T.Text -> Tag T.Text -> Bool
 matchClass _ className (TagOpen _ attrs) = case L.lookup (T.pack "class") attrs of
   Just klass -> className `L.elem` T.words klass
-  Nothing -> False
+  Nothing    -> False
 
 matchClass _ _ _ = False
 
 parseTimestamp :: T.Text -> Maybe UTCTime
 parseTimestamp text = case parse timestampParser "" text of
-  Left _ -> Nothing
-  Right val -> Just val 
+  Left _    -> Nothing
+  Right val -> Just val
   where
     timestampParser :: Parser UTCTime
     timestampParser = do
@@ -113,7 +113,7 @@ getItem indexItem = do
           dropWhile (not . matchClass (T.pack "li") (T.pack "date")) $ tags
 
         tags = parseTags rawHtml
-      
+
 
 getIndex :: T.Text -> Int -> IO ([IndexItem], Bool)
 getIndex rootUrl pageNumber = do
@@ -121,7 +121,7 @@ getIndex rootUrl pageNumber = do
   resp <- httpLBS rq
   return $ if getResponseStatusCode resp == 200
     then parseIndex . decodeUtf8 . BL.toStrict . getResponseBody $ resp
-    else ([], False) 
+    else ([], False)
   where
     parseIndex :: T.Text -> ([IndexItem], Bool)
     parseIndex x = (mapMaybe parseIndexEntry $ partitions (matchClass (T.pack "div") (T.pack "topic")) $ parseTags x, hasNextPage $ parseTags x)
@@ -138,7 +138,7 @@ getIndex rootUrl pageNumber = do
             iiTitle = text,
             iiPubTime = ts }
         _ -> Nothing
-    
+
 
     makeUrl root pagenumber
       | pagenumber == 0 || pagenumber == 1 = root
@@ -149,5 +149,5 @@ getIndex rootUrl pageNumber = do
       else paginationLinksCount > 1
       where
         paginationLinksCount = length . filter (~== "<a>") . extractBetween "p" . dropWhile (~/= "<div id=pagination>") $ tags
-        
+
 

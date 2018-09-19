@@ -7,19 +7,19 @@ module ATrade.Quotes.QTIS
   qtisGetTickersInfo'
 ) where
 
-import ATrade.Types
-import Control.Monad
-import Data.Aeson
-import Data.Maybe
+import           ATrade.Types
+import           Control.Monad
+import           Data.Aeson
 import qualified Data.ByteString.Char8 as BC8
-import qualified Data.ByteString.Lazy as BL
-import qualified Data.Text as T
-import System.ZMQ4
-import System.Log.Logger
+import qualified Data.ByteString.Lazy  as BL
+import           Data.Maybe
+import qualified Data.Text             as T
+import           System.Log.Logger
+import           System.ZMQ4
 
 data TickerInfo = TickerInfo {
-  tiTicker :: T.Text,
-  tiLotSize :: Integer,
+  tiTicker   :: T.Text,
+  tiLotSize  :: Integer,
   tiTickSize :: Price
 } deriving (Show, Eq)
 
@@ -57,4 +57,4 @@ qtisGetTickersInfo ctx endpoint tickers =
       then decode $ BL.fromStrict payload
       else Nothing
     parseResponse _ = Nothing
-      
+

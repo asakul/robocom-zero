@@ -5,17 +5,17 @@ module Test.RoboCom.Indicators
   unitTests
 ) where
 
-import Test.Tasty
-import Test.Tasty.SmallCheck as SC
-import Test.Tasty.QuickCheck as QC
-import Test.Tasty.HUnit
+import           Test.Tasty
+import           Test.Tasty.HUnit
+import           Test.Tasty.QuickCheck     as QC
+import           Test.Tasty.SmallCheck     as SC
 
-import qualified Data.Text as T
-import ATrade.Types
-import Data.Time.Clock
-import Data.Time.Calendar
+import           ATrade.Types
+import qualified Data.Text                 as T
+import           Data.Time.Calendar
+import           Data.Time.Clock
 
-import ATrade.RoboCom.Indicators
+import           ATrade.RoboCom.Indicators
 
 unitTests = testGroup "RoboCom.Indicators" [
   testEma,

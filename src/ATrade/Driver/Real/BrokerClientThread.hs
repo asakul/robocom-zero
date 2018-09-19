@@ -5,26 +5,28 @@ module ATrade.Driver.Real.BrokerClientThread (
   BrokerCommand(..)
 ) where
 
-import ATrade.Broker.Client
-import ATrade.Broker.Protocol
-import ATrade.RoboCom.Monad hiding (submitOrder, cancelOrder)
-import ATrade.RoboCom.Types
-import ATrade.Types
+import           ATrade.Broker.Client
+import           ATrade.Broker.Protocol
+import           ATrade.RoboCom.Monad           hiding (cancelOrder,
+                                                 submitOrder)
+import           ATrade.RoboCom.Types
+import           ATrade.Types
 
-import Control.Concurrent.BoundedChan
-import Control.Concurrent hiding (writeChan, readChan, writeList2Chan, yield)
-import Control.Exception
-import Control.Monad.Loops
-import Control.Monad
+import           Control.Concurrent             hiding (readChan, writeChan,
+                                                 writeList2Chan, yield)
+import           Control.Concurrent.BoundedChan
+import           Control.Exception
+import           Control.Monad
+import           Control.Monad.Loops
 
-import Data.IORef
-import qualified Data.Text as T
-import Data.Text.Encoding
-import Data.Time.Clock
-import Data.Maybe
+import           Data.IORef
+import           Data.Maybe
+import qualified Data.Text                      as T
+import           Data.Text.Encoding
+import           Data.Time.Clock
 
-import System.Log.Logger
-import System.ZMQ4 hiding (Event)
+import           System.Log.Logger
+import           System.ZMQ4                    hiding (Event)
 
 data BrokerCommand = BrokerSubmitOrder Order | BrokerCancelOrder Integer | BrokerRequestNotifications
 
@@ -56,7 +58,7 @@ startBrokerClientThread instId ctx brEp ordersChan eventChan shutdownVar = forkI
               debugM "Strategy" "Order cancelled"
             BrokerRequestNotifications -> do
               t <- getCurrentTime
-              nt <- readIORef lastNotificationTime 
+              nt <- readIORef lastNotificationTime
               when (t `diffUTCTime` nt > 1) $ do
                 maybeNs <- getNotifications bs
                 case maybeNs of
@@ -78,4 +80,4 @@ sendNotification :: BoundedChan Event -> Notification -> IO ()
 sendNotification eventChan notification =
   writeChan eventChan $ case notification of
     OrderNotification oid state -> OrderUpdate oid state
-    TradeNotification trade -> NewTrade trade
+    TradeNotification trade     -> NewTrade trade

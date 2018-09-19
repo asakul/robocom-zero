@@ -1,6 +1,6 @@
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE FlexibleContexts #-}
 
 module ATrade.RoboCom.Utils (
   barStartTime,
@@ -13,14 +13,14 @@ module ATrade.RoboCom.Utils (
   parseTime
 ) where
 
-import ATrade.Types
+import           ATrade.Types
 
-import Data.Time.Clock
-import Data.Time.Calendar
-import qualified Data.Text as T
-import Data.Text.Lazy.Builder
+import qualified Data.Text              as T
+import           Data.Text.Lazy.Builder
+import           Data.Time.Calendar
+import           Data.Time.Clock
 
-import Text.Read hiding (String)
+import           Text.Read              hiding (String)
 
 rescaleToDaily :: [Bar] -> [Bar]
 rescaleToDaily (firstBar:restBars) = rescaleToDaily' restBars firstBar
@@ -37,10 +37,10 @@ rescaleToDaily (firstBar:restBars) = rescaleToDaily' restBars firstBar
 rescaleToDaily [] = []
 
 barEndTime :: Bar -> Integer -> UTCTime
-barEndTime bar tframe = addUTCTime (fromIntegral $ (1 + barNumber (barTimestamp bar) tframe) * tframe) epoch 
+barEndTime bar tframe = addUTCTime (fromIntegral $ (1 + barNumber (barTimestamp bar) tframe) * tframe) epoch
 
 barStartTime :: Bar -> Integer -> UTCTime
-barStartTime bar tframe = addUTCTime (fromIntegral $ barNumber (barTimestamp bar) tframe * tframe) epoch 
+barStartTime bar tframe = addUTCTime (fromIntegral $ barNumber (barTimestamp bar) tframe * tframe) epoch
 
 barNumber :: UTCTime -> Integer -> Integer
 barNumber ts barlen = floor (diffUTCTime ts epoch) `div` barlen

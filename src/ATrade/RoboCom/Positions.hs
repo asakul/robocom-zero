@@ -1,9 +1,9 @@
-{-# LANGUAGE DeriveGeneric #-}
+{-# LANGUAGE DeriveGeneric     #-}
+{-# LANGUAGE FlexibleContexts  #-}
+{-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE MultiWayIf #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE QuasiQuotes #-}
+{-# LANGUAGE QuasiQuotes       #-}
+{-# LANGUAGE TypeApplications  #-}
 
 {-|
  - Module       : ATrade.RoboCom.Combinators
@@ -67,20 +67,20 @@ module ATrade.RoboCom.Positions
   setStopLossAndTakeProfit
 ) where
 
-import GHC.Generics
+import           GHC.Generics
 
-import ATrade.Types
-import ATrade.RoboCom.Monad
-import ATrade.RoboCom.Types
+import           ATrade.RoboCom.Monad
+import           ATrade.RoboCom.Types
+import           ATrade.Types
 
-import Control.Monad
-import Ether
+import           Control.Monad
+import           Ether
 
-import Data.Aeson
-import qualified Data.Map as M
-import qualified Data.List as L
-import qualified Data.Text as T
-import Data.Time.Clock
+import           Data.Aeson
+import qualified Data.List            as L
+import qualified Data.Map             as M
+import qualified Data.Text            as T
+import           Data.Time.Clock
 
 data PositionState = PositionWaitingOpenSubmission Order
   | PositionWaitingOpen
@@ -93,20 +93,20 @@ data PositionState = PositionWaitingOpenSubmission Order
     deriving (Show, Eq, Generic)
 
 data Position = Position {
-  posId :: T.Text,
-  posAccount :: T.Text,
-  posTicker :: TickerId,
-  posBalance :: Integer,
-  posState :: PositionState,
-  posNextState :: Maybe PositionState,
-  posStopPrice :: Maybe Price,
-  posStopLimitPrice :: Maybe Price,
-  posTakeProfitPrice :: Maybe Price,
-  posCurrentOrder :: Maybe Order,
+  posId                 :: T.Text,
+  posAccount            :: T.Text,
+  posTicker             :: TickerId,
+  posBalance            :: Integer,
+  posState              :: PositionState,
+  posNextState          :: Maybe PositionState,
+  posStopPrice          :: Maybe Price,
+  posStopLimitPrice     :: Maybe Price,
+  posTakeProfitPrice    :: Maybe Price,
+  posCurrentOrder       :: Maybe Order,
   posSubmissionDeadline :: Maybe UTCTime,
-  posExecutionDeadline :: Maybe UTCTime,
-  posEntryTime :: Maybe UTCTime,
-  posExitTime :: Maybe UTCTime
+  posExecutionDeadline  :: Maybe UTCTime,
+  posEntryTime          :: Maybe UTCTime,
+  posExitTime           :: Maybe UTCTime
 } deriving (Show, Eq, Generic)
 
 posEqByIds :: Position -> Position -> Bool
@@ -171,7 +171,7 @@ orderDeadline :: Maybe UTCTime -> UTCTime -> Bool
 orderDeadline maybeDeadline lastTs =
   case maybeDeadline of
     Just deadline -> lastTs >= deadline
-    Nothing -> False
+    Nothing       -> False
 
 
 dispatchPosition :: (StateHasPositions s, MonadRobot m c s) => Event -> Position -> m Position
@@ -249,7 +249,7 @@ dispatchPosition event pos = case posState pos of
         | otherwise ->  case event of
           NewTick tick -> if
             | datatype tick == LastTradePrice && stopLoss tick -> case posStopLimitPrice pos of
-              Nothing -> exitAtMarket pos "stop"
+              Nothing  -> exitAtMarket pos "stop"
               Just lim -> exitAtLimit 86400 lim pos "stop"
             | datatype tick == LastTradePrice && takeProfit tick -> exitAtMarket pos "take_profit"
             | otherwise -> return pos
@@ -276,7 +276,7 @@ dispatchPosition event pos = case posState pos of
                 else return pos
             _ -> return pos
         else do
-          appendToLog "Deadline when cancelling pending order" 
+          appendToLog "Deadline when cancelling pending order"
           return pos { posState = PositionCancelled }
 
     handlePositionWaitingCloseSubmission pendingOrder = do
@@ -285,7 +285,7 @@ dispatchPosition event pos = case posState pos of
         then do
           case posCurrentOrder pos of
             Just order -> cancelOrder (orderId order)
-            Nothing -> doNothing
+            Nothing    -> doNothing
           return $ pos { posCurrentOrder = Nothing, posState = PositionOpen, posSubmissionDeadline = Nothing } -- TODO call TimeoutHandler if present
         else case event of
           OrderSubmitted order ->
@@ -302,7 +302,7 @@ dispatchPosition event pos = case posState pos of
         then do
           case posCurrentOrder pos of
             Just order -> cancelOrder (orderId order)
-            _ -> doNothing
+            _          -> doNothing
           return $ pos { posState = PositionOpen, posSubmissionDeadline = Nothing, posExecutionDeadline = Nothing } -- TODO call TimeoutHandler if present
         else case (event, posCurrentOrder pos) of
           (OrderUpdate oid newstate, Just order) ->
@@ -330,7 +330,7 @@ dispatchPosition event pos = case posState pos of
           Just tp -> if posIsLong pos then value tick >= tp else value tick <= tp
           Nothing -> False
         else False
-    
+
     balanceForOrder order = if orderOperation order == Buy then orderQuantity order else - orderQuantity order
 
 newPosition :: (StateHasPositions s, MonadRobot m c s) => Order -> T.Text -> TickerId -> Operation -> Int -> NominalDiffTime -> m Position
@@ -381,7 +381,7 @@ getCurrentTicker = do
   maybeBars <- flip M.lookup bars .  mainTicker <$> getConfig
   case maybeBars of
     Just b -> return $ bsBars b
-    _ -> return []
+    _      -> return []
 
 getCurrentTickerSeries :: (ParamsHasMainTicker c, MonadRobot m c s) => m (Maybe BarSeries)
 getCurrentTickerSeries = do
@@ -403,48 +403,48 @@ getAllActiveAndPendingPositions = L.filter
   where
     isPositionWaitingOpenSubmission pos = case posState pos of
       PositionWaitingOpenSubmission _ -> True
-      _ -> False
+      _                               -> False
 
 onNewBarEvent :: (MonadRobot m c s) => Event -> (Bar -> m ()) -> m ()
 onNewBarEvent event f = case event of
   NewBar bar -> f bar
-  _ -> doNothing
+  _          -> doNothing
 
 onNewTickEvent :: (MonadRobot m c s) => Event -> (Tick -> m ()) -> m ()
 onNewTickEvent event f = case event of
   NewTick tick -> f tick
-  _ -> doNothing
+  _            -> doNothing
 
 onNewTickEventWithDatatype :: (MonadRobot m c s) => Event -> DataType -> (Tick -> m ()) -> m ()
 onNewTickEventWithDatatype event dtype f = case event of
   NewTick tick -> when (datatype tick == dtype) $ f tick
-  _ -> doNothing
+  _            -> doNothing
 
 onTimerFiredEvent :: (MonadRobot m c s) => Event -> (UTCTime -> m ()) -> m ()
 onTimerFiredEvent event f = case event of
   TimerFired timer -> f timer
-  _ -> doNothing
+  _                -> doNothing
 
 
 onOrderSubmittedEvent :: (MonadRobot m c s) => Event -> (Order -> m ()) -> m ()
 onOrderSubmittedEvent event f = case event of
   OrderSubmitted order -> f order
-  _ -> doNothing
+  _                    -> doNothing
 
 onOrderUpdateEvent :: (MonadRobot m c s) => Event -> (OrderId -> OrderState -> m ()) -> m ()
 onOrderUpdateEvent event f = case event of
   OrderUpdate oid newstate -> f oid newstate
-  _ -> doNothing
+  _                        -> doNothing
 
 onTradeEvent :: (MonadRobot m c s) => Event -> (Trade -> m ()) -> m ()
 onTradeEvent event f = case event of
   NewTrade trade -> f trade
-  _ -> doNothing
+  _              -> doNothing
 
 onActionCompletedEvent :: (MonadRobot m c s) => Event -> (Int -> Value -> m ()) -> m ()
 onActionCompletedEvent event f = case event of
   ActionCompleted tag v -> f tag v
-  _ -> doNothing
+  _                     -> doNothing
 
 enterAtMarket :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Operation -> m Position
 enterAtMarket signalName operation = do
@@ -498,7 +498,7 @@ enterAtLimitForTicker tickerId timeToCancel signalName price operation = do
 enterAtLimitForTickerWithParams :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation = do
   lastTs <- seLastTimestamp <$> getEnvironment
-  submitOrder order 
+  submitOrder order
   appendToLog $ [st|enterAtLimit: %?, deadline: %?|] tickerId (timeToCancel `addUTCTime` lastTs)
   newPosition order account tickerId operation quantity 20 >>=
     modifyPosition (\p -> p { posExecutionDeadline = Just $ timeToCancel `addUTCTime` lastTs })
@@ -567,7 +567,7 @@ exitAtLimit timeToCancel price position signalName = do
   inst <- seInstanceId <$> getEnvironment
   case posCurrentOrder position of
     Just order -> cancelOrder (orderId order)
-    Nothing -> doNothing
+    Nothing    -> doNothing
   submitOrder (closeOrder inst)
   appendToLog $ [st|exitAtLimit: %?, deadline: %?|] (posTicker position) (timeToCancel `addUTCTime` lastTs)
   modifyPosition (\pos ->

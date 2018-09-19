@@ -1,8 +1,8 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
+{-# LANGUAGE FlexibleContexts     #-}
+{-# LANGUAGE FlexibleInstances    #-}
+{-# LANGUAGE OverloadedStrings    #-}
+{-# LANGUAGE TemplateHaskell      #-}
 {-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
 
 module ATrade.RoboCom.Types (
   Bar(..),
@@ -13,15 +13,15 @@ module ATrade.RoboCom.Types (
   Bars
 ) where
 
-import qualified Data.Text as T
-import qualified Data.Text.Lazy as TL
-import qualified Data.Map.Strict as M
+import           ATrade.Types
+import           Data.Aeson
+import           Data.Aeson.Types
 import qualified Data.HashMap.Strict as HM
-import Data.Aeson
-import Data.Aeson.Types
-import ATrade.Types
-import Data.Time.Clock
-import Text.Read hiding (String)
+import qualified Data.Map.Strict     as M
+import qualified Data.Text           as T
+import qualified Data.Text.Lazy      as TL
+import           Data.Time.Clock
+import           Text.Read           hiding (String)
 
 newtype Timeframe =
   Timeframe Integer deriving (Show, Eq)
@@ -31,15 +31,15 @@ tfSeconds (Timeframe s) = fromInteger s
 
 data BarSeries =
   BarSeries {
-    bsTickerId :: TickerId,
+    bsTickerId  :: TickerId,
     bsTimeframe :: Timeframe,
-    bsBars :: [Bar]
+    bsBars      :: [Bar]
   } deriving (Show, Eq)
 
 -- | Ticker description record
 data Ticker = Ticker {
-  code :: T.Text, -- ^ Main ticker code, which is used to make orders and tick parsing
-  aliases :: [(String, String)], -- ^ List of aliases for this tick in the form ("alias-name", "alias").
+  code             :: T.Text, -- ^ Main ticker code, which is used to make orders and tick parsing
+  aliases          :: [(String, String)], -- ^ List of aliases for this tick in the form ("alias-name", "alias").
                                  -- This is needed when other data providers use different codcodes for the same tick.
                                  -- For now, only "finam" alias is used
   timeframeSeconds :: Integer -- ^ Data timeframe. Will be used by 'BarAggregator'

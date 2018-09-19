@@ -1,13 +1,12 @@
-{-# LANGUAGE OverloadedStrings #-}
-{-# LANGUAGE FlexibleContexts #-}
-{-# LANGUAGE TypeSynonymInstances #-}
-{-# LANGUAGE FlexibleInstances #-}
-{-# LANGUAGE TemplateHaskell #-}
-{-# LANGUAGE BangPatterns #-}
-{-# LANGUAGE TypeApplications #-}
-{-# LANGUAGE MultiParamTypeClasses #-}
+{-# LANGUAGE FlexibleContexts       #-}
+{-# LANGUAGE FlexibleInstances      #-}
 {-# LANGUAGE FunctionalDependencies #-}
-{-# LANGUAGE RankNTypes #-}
+{-# LANGUAGE MultiParamTypeClasses  #-}
+{-# LANGUAGE OverloadedStrings      #-}
+{-# LANGUAGE RankNTypes             #-}
+{-# LANGUAGE TemplateHaskell        #-}
+{-# LANGUAGE TypeApplications       #-}
+{-# LANGUAGE TypeSynonymInstances   #-}
 
 module ATrade.RoboCom.Monad (
   RState,
@@ -27,15 +26,15 @@ module ATrade.RoboCom.Monad (
   st
 ) where
 
-import ATrade.Types
-import ATrade.RoboCom.Types
+import           ATrade.RoboCom.Types
+import           ATrade.Types
 
-import Ether
+import           Ether
 
-import Data.Time.Clock
-import Data.Aeson.Types
-import qualified Data.Text as T
-import Text.Printf.TH
+import           Data.Aeson.Types
+import qualified Data.Text            as T
+import           Data.Time.Clock
+import           Text.Printf.TH
 
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
@@ -52,7 +51,7 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
     oldState <- getState
     setState (f oldState)
   getEnvironment :: m StrategyEnvironment
-  
+
 data RState
 data RConfig
 data RActions
@@ -85,21 +84,21 @@ data StrategyAction = ActionOrder Order
   | ActionIO Int (IO Value)
 
 data StrategyEnvironment = StrategyEnvironment {
-  seInstanceId :: !T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
-  seAccount :: !T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
-  seVolume :: !Int, -- ^ Volume to use for this instance (in lots/contracts)
-  seBars :: !Bars, -- ^ List of tickers which is used by this strategy
+  seInstanceId    :: !T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
+  seAccount       :: !T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
+  seVolume        :: !Int, -- ^ Volume to use for this instance (in lots/contracts)
+  seBars          :: !Bars, -- ^ List of tickers which is used by this strategy
   seLastTimestamp :: !UTCTime
 } deriving (Eq)
 
 instance Show StrategyAction where
-  show (ActionOrder order) = "ActionOrder " ++ show order
+  show (ActionOrder order)     = "ActionOrder " ++ show order
   show (ActionCancelOrder oid) = "ActionCancelOrder " ++ show oid
-  show (ActionLog t) = "ActionLog " ++ show t
-  show (ActionIO x _) = "ActionIO " ++ show x
-  show (ActionSetupTimer t) = "ActionSetupTimer e" ++ show t
+  show (ActionLog t)           = "ActionLog " ++ show t
+  show (ActionIO x _)          = "ActionIO " ++ show x
+  show (ActionSetupTimer t)    = "ActionSetupTimer e" ++ show t
 
-tellAction :: StrategyAction -> StrategyElement c s () 
+tellAction :: StrategyAction -> StrategyElement c s ()
 tellAction a = tell @RActions [a]
 
 instance MonadRobot (StrategyMonad c s) c s where

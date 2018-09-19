@@ -18,12 +18,11 @@ module ATrade.RoboCom.Indicators
   percentRank
 ) where
 
-import ATrade.Types
+import           ATrade.Types
 
-import qualified Data.List as L
-import Data.Time.Clock
-import Safe
-import Debug.Trace
+import qualified Data.List       as L
+import           Data.Time.Clock
+import           Safe
 
 cmf :: Int -> [Bar] -> Double
 cmf period bars = sum (toDouble . clv <$> take period bars) / toDouble (sum (fromInteger . barVolume <$> bars))
@@ -90,7 +89,7 @@ emaWithAlpha alpha values = foldl (\x y -> x * (1 - alpha) + y * alpha) 0 $ reve
 intradayBarNumber :: [Bar] -> Int
 intradayBarNumber bars = case headMay bars of
   Just bar -> intradayBarNumber' bar bars - 1
-  Nothing -> 0
+  Nothing  -> 0
   where
     intradayBarNumber' :: Bar -> [Bar] -> Int
     intradayBarNumber' bar bars' = case headMay bars' of

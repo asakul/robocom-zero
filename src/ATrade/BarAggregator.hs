@@ -112,7 +112,7 @@ handleTick tick = runState $ do
     updateBarTimestamp !bar newtick = bar { barTimestamp = newTimestamp }
       where
         newTimestamp = timestamp newtick
-        
+
     emptyBarFrom !bar newtick = newBar
       where
         newTimestamp = timestamp newtick

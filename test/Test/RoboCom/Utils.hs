@@ -5,17 +5,17 @@ module Test.RoboCom.Utils
   unitTests
 ) where
 
-import Test.Tasty
-import Test.Tasty.SmallCheck as SC
-import Test.Tasty.QuickCheck as QC
-import Test.Tasty.HUnit
+import           Test.Tasty
+import           Test.Tasty.HUnit
+import           Test.Tasty.QuickCheck as QC
+import           Test.Tasty.SmallCheck as SC
 
-import qualified Data.Text as T
-import ATrade.Types
-import Data.Time.Clock
-import Data.Time.Calendar
+import           ATrade.Types
+import qualified Data.Text             as T
+import           Data.Time.Calendar
+import           Data.Time.Clock
 
-import ATrade.RoboCom.Utils
+import           ATrade.RoboCom.Utils
 
 unitTests = testGroup "RoboCom.Indicators" [
   testRescaleToDaily,
@@ -75,7 +75,7 @@ testRescaleToDaily = testCase "Rescale to daily" $ assertEqual "Incorrect rescal
 
 testRescaleToDaily2 = testCase "Rescale to daily 2" $ assertEqual "Incorrect rescale" dailyBars $ rescaleToDaily min30Bars
   where
-    dailyBars = reverse [ 
+    dailyBars = reverse [
       ibar 1 17 3.6065000 3.6740000 3.5670000 3.6740000 47398000,
       ibar 2 17 3.6760000 3.6980000 3.6350000 3.6980000 32643000,
       ibar 3 17 3.7000000 3.7090000 3.6545000 3.6800000 35727000,
