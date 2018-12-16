@@ -4,7 +4,7 @@
  - Module       : ATrade.BarAggregator
  - Description  : Aggregates incoming tick stream to bars
  - Copyright    : (c) Denis Tereshkin 2016-2017
- - License      : Proprietary
+ - License      : BSD
  - Maintainer   : denis@kasan.ws
  - Stability    : experimental
  - Portability  : POSIX
