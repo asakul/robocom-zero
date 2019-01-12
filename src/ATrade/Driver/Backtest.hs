@@ -104,8 +104,7 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
       let finalState = execState (unBacktestingMonad s) $ defaultBacktestState defaultState params tickerList
       print $ cash finalState
       print $ tradesLog finalState
-      forM_ (logs finalState) putStrLn
-      print $ (M.keys . seBars . strategyEnvironment) finalState
+      forM_ (reverse . logs $ finalState) putStrLn
 
     loadStrategyConfig :: (FromJSON c) => Params -> IO ([Ticker], c)
     loadStrategyConfig params = do
@@ -162,7 +161,7 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
       env <- gets strategyEnvironment
       let oldTimestamp = seLastTimestamp env
       let newTimestamp = barTimestamp bar
-      let newenv = env { seBars = updateBars (seBars env) bar }
+      let newenv = env { seBars = updateBars (seBars env) bar, seLastTimestamp = newTimestamp }
       curState <- gets robotState
       modify' (\s -> s { strategyEnvironment = newenv })
       handleEvents [NewBar bar])

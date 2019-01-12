@@ -43,7 +43,7 @@ testRsi2 = testCase "RSI calculation" $ assertEqualWithEpsilon 1 (rsi 6 bars) 18
     bars = reverse [1156.2, 1158.8, 1158.3, 1160.3, 1160.9, 1159.8, 1163.0, 1156.3, 1156.0, 1155.3, 1153.8,
       1156.2, 1154.1, 1155.9, 1158.1, 1155.8, 1155.9, 1154.5, 1149.8, 1146.5, 1152.1, 1154.0, 1150.2, 1139.5, 1132.6]
 
-testAtr = testCase "ATR calculation" $ assertEqualWithEpsilon 0.1 (atr 14 bars) 1.32
+testAtr = testCase "ATR calculation" $ assertEqualWithEpsilon 0.01 (atr 14 bars) 1.32
   where
     bars = reverse [bar 48.70 47.79 48.16,
       bar 48.72 48.14 48.61,

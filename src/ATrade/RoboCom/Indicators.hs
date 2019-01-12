@@ -40,7 +40,9 @@ cci period bars = (head tp - tpMean) / (0.015 * meanDev)
     typicalPrice a b c = (a + b + c) / 3
 
 atr :: Int -> [Bar] -> Double
-atr period bars = foldl (\x y -> (x * (period' - 1) + y) / period') 0 (reverse $ take (5 * period) trueranges)
+atr period bars = case reverse (take (5 * period) trueranges) of
+                    (firstValue:rest) -> foldl (\x y -> (x * (period' - 1) + y) / period') firstValue rest
+                    _ -> 0
   where
     trueranges :: [Double]
     trueranges = zipWith trueRange bars (tail bars)
