@@ -54,7 +54,9 @@ defaultStrategyEnvironment = StrategyEnvironment
 unitTests = testGroup "RoboCom.Positions" [
   testEnterAtMarket,
   testEnterAtMarketSendsAction,
-  testEnterAtMarketSubmissionDeadline
+  testDefaultHandlerSubmissionDeadline,
+  testDefaultHandlerAfterSubmissionPositionIsWaitingOpen,
+  testDefaultHandlerPositionWaitingOpenOrderOpenExecuted1 
   ]
 
 testEnterAtMarket = testCase "enterAtMarket creates position in PositionWaitingOpenSubmission state" $ do
@@ -94,7 +96,7 @@ testEnterAtMarketSendsAction = testCase "enterAtMarket sends ActionSubmitOrder" 
     isActionOrder (ActionOrder _) = True
     isActionOrder _ = False
     
-testEnterAtMarketSubmissionDeadline = testCase "defaultHandler after submission deadline marks position as cancelled" $ do
+testDefaultHandlerSubmissionDeadline = testCase "defaultHandler after submission deadline marks position as cancelled" $ do
   let (newState, actions, _) = runStrategyElement TestConfig defaultState defaultStrategyEnvironment element
   let (newState', actions', _) = runStrategyElement TestConfig newState defaultStrategyEnvironment { seLastTimestamp = afterDeadline } $ defaultHandler (NewTick tick)
   let pos = head . positions $ newState'
@@ -108,3 +110,58 @@ testEnterAtMarketSubmissionDeadline = testCase "defaultHandler after submission 
             timestamp = afterDeadline,
             value = fromDouble 12.00,
             volume = 1 }
+
+testDefaultHandlerAfterSubmissionPositionIsWaitingOpen = testCase "defaultHandler after successful submission sets position state as PositionWaitingOpen" $ do
+  let (newState, actions, _) = runStrategyElement TestConfig defaultState defaultStrategyEnvironment element
+  let pos = head . positions $ newState
+  let (PositionWaitingOpenSubmission order) = posState pos
+  let (newState', actions', _) = runStrategyElement TestConfig newState defaultStrategyEnvironment { seLastTimestamp = beforeDeadline } $ defaultHandler (OrderSubmitted order {orderId = 1 })
+  let pos' = head . positions $ newState'
+  assertEqual "New position state should be PositionWaitingOpen" (posState pos') PositionWaitingOpen
+  where
+    element = enterAtMarket "long" Buy
+    beforeDeadline = (UTCTime (fromGregorian 1970 1 1) 1)
+
+testDefaultHandlerPositionWaitingOpenOrderCancelledExecuted0 = testCase "defaultHandler in PositionWaitingOpen, if order is cancelled and nothing is executed, marks position as cancelled" $ do
+  let (newState, actions, _) = runStrategyElement TestConfig defaultState defaultStrategyEnvironment element
+  let pos = head . positions $ newState
+  let (PositionWaitingOpenSubmission order) = posState pos
+  let (newState', actions', _) = runStrategyElement TestConfig newState defaultStrategyEnvironment { seLastTimestamp = ts1 } $ defaultHandler (OrderSubmitted order {orderId = 1 })
+  let (newState'', actions'', _) = runStrategyElement TestConfig newState defaultStrategyEnvironment { seLastTimestamp = ts2 } $ defaultHandler (OrderUpdate 1 Cancelled)
+  let pos = head . positions $ newState''
+  assertEqual "New position state should be PositionCancelled" (posState pos) PositionCancelled
+  where
+    element = enterAtMarket "long" Buy
+    ts1 = (UTCTime (fromGregorian 1970 1 1) 1)
+    ts2 = (UTCTime (fromGregorian 1970 1 1) 2)
+
+testDefaultHandlerPositionWaitingOpenOrderOpenExecuted1 = testCase "defaultHandler in PositionWaitingOpen, if order is cancelled and something is executed, marks position as open" $ do
+  let (newState, actions, _) = runStrategyElement TestConfig defaultState defaultStrategyEnvironment element
+  let pos = head . positions $ newState
+  let (PositionWaitingOpenSubmission order) = posState pos
+  let (newState', actions', _) = runStrategyElement TestConfig newState defaultStrategyEnvironment { seLastTimestamp = ts1, seVolume = 2 } $ defaultHandler (OrderSubmitted order {orderId = 1 })
+  let (newState'', actions'', _) = runStrategyElement TestConfig newState' defaultStrategyEnvironment { seLastTimestamp = ts2 } $ defaultHandler (NewTrade trade)
+  let (newState''', actions''', _) = runStrategyElement TestConfig newState'' defaultStrategyEnvironment { seLastTimestamp = ts3 } $ defaultHandler (OrderUpdate 1 Cancelled)
+  let pos = head . positions $ newState'''
+  assertEqual "New position state should be PositionOpen" (posState pos) PositionOpen
+  where
+    element = enterAtMarket "long" Buy
+    ts1 = (UTCTime (fromGregorian 1970 1 1) 1)
+    ts2 = (UTCTime (fromGregorian 1970 1 1) 2)
+    ts3 = (UTCTime (fromGregorian 1970 1 1) 3)
+    trade = Trade
+            {
+              tradeOrderId = 1,
+              tradePrice = fromDouble 10,
+              tradeQuantity = 1,
+              tradeVolume = fromDouble 10,
+              tradeVolumeCurrency = "FOO",
+              tradeOperation = Buy,
+              tradeAccount = "test_account",
+              tradeSecurity = "TEST_TICKER",
+              tradeTimestamp = ts3,
+              tradeCommission = fromDouble 0,
+              tradeSignalId = SignalId "test_instance" "long" ""
+            }
+
+    
