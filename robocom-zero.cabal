@@ -28,7 +28,7 @@ library
                      , ATrade.Driver.Real
                      , ATrade.Driver.Backtest
   build-depends:       base >= 4.7 && < 5
-                     , libatrade
+                     , libatrade == 0.8.0.0
                      , text
                      , text-icu
                      , errors

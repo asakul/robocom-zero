@@ -32,13 +32,16 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter = forkIO $ do
       stopQuoteSourceClient qs
       debugM "Strategy" "Quotesource client: stop")
     (\_ -> forever $ do
-      tick <- readChan tickChan
-      when (goodTick tick) $ do
-        writeChan eventChan (NewTick tick)
-        aggValue <- readIORef agg
-        case handleTick tick aggValue of
-          (Just bar, !newAggValue) -> writeChan eventChan (NewBar bar) >> writeIORef agg newAggValue
-          (Nothing, !newAggValue) -> writeIORef agg newAggValue)
+      qdata <- readChan tickChan
+      case qdata of
+        QDTick tick -> when (goodTick tick) $ do
+          writeChan eventChan (NewTick tick)
+          aggValue <- readIORef agg
+          case handleTick tick aggValue of
+            (Just bar, !newAggValue) -> writeChan eventChan (NewBar bar) >> writeIORef agg newAggValue
+            (Nothing, !newAggValue) -> writeIORef agg newAggValue
+        QDBar (tf, bar) -> return () -- TODO
+    )
   where
     goodTick tick = tickFilter tick &&
       (datatype tick /= LastTradePrice || (datatype tick == LastTradePrice && volume tick > 0))
