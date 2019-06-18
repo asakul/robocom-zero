@@ -18,6 +18,7 @@ module ATrade.BarAggregator (
   BarAggregator(..),
   mkAggregatorFromBars,
   handleTick,
+  handleBar,
   hmsToDiffTime
 ) where
 
@@ -133,3 +134,53 @@ handleTick tick = runState $ do
           barLow = barClose bar,
           barClose = barClose bar,
           barVolume = 0 }
+
+handleBar :: Bar -> BarAggregator -> (Maybe Bar, BarAggregator)
+handleBar bar = runState $ do
+  tws <- gets tickTimeWindows
+  mybars <- gets bars
+  if (any (isInTimeInterval bar) tws)
+    then
+      case M.lookup (barSecurity bar) mybars of
+        Just series -> case bsBars series of
+          (b:bs) -> do
+            let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
+            if currentBn == barNumber (barTimestamp bar) (tfSeconds $ bsTimeframe series)
+              then do
+                lBars %= M.insert (barSecurity bar) series { bsBars = updateBar b bar : bs }
+                return Nothing
+              else
+                if barEndTime b (tfSeconds $ bsTimeframe series) == barTimestamp bar
+                  then do
+                    lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : (updateBar b bar : bs) }
+                    return . Just $ updateBar b bar
+                  else do
+                    lBars %= M.insert (barSecurity bar) series { bsBars = bar : b : bs }
+                    return . Just $ b
+          _      -> do
+            lBars %= M.insert (barSecurity bar) series { bsBars = [bar] }
+            return Nothing
+        _ -> return Nothing
+    else
+      return Nothing
+  where
+    isInTimeInterval bar' (a, b) = (utctDayTime . barTimestamp) bar' >= a && (utctDayTime . barTimestamp) bar' <= b
+    updateBar !bar' newbar =
+      let newHigh = max (barHigh bar') (barHigh newbar)
+          newLow = min (barLow bar') (barLow newbar) in
+        bar' {
+            barTimestamp = barTimestamp newbar,
+            barHigh = newHigh,
+            barLow = newLow,
+            barClose = barClose newbar,
+            barVolume = barVolume bar' + (abs . barVolume $ newbar) }
+
+    emptyBarFrom bar' = Bar {
+          barSecurity = barSecurity bar',
+          barTimestamp = barTimestamp bar',
+          barOpen = barClose bar',
+          barHigh = barClose bar',
+          barLow = barClose bar',
+          barClose = barClose bar',
+          barVolume = 0 }
+
