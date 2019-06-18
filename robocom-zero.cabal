@@ -27,6 +27,7 @@ library
                      , ATrade.Quotes.QTIS
                      , ATrade.Driver.Real
                      , ATrade.Driver.Backtest
+                     , ATrade.BarAggregator
   build-depends:       base >= 4.7 && < 5
                      , libatrade == 0.8.0.0
                      , text
@@ -64,8 +65,7 @@ library
                      , hedis
 
   default-language:    Haskell2010
-  other-modules:       ATrade.BarAggregator
-                     , ATrade.Exceptions
+  other-modules:       ATrade.Exceptions
                      , ATrade.Driver.Real.BrokerClientThread
                      , ATrade.Driver.Real.QuoteSourceThread
                      , ATrade.Driver.Real.Types
@@ -93,6 +93,7 @@ test-suite robots-test
   other-modules:     Test.RoboCom.Indicators
                    , Test.RoboCom.Positions
                    , Test.RoboCom.Utils
+                   , Test.BarAggregator
 
 source-repository head
   type:     git

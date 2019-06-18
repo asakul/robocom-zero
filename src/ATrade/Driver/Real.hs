@@ -131,7 +131,7 @@ storeState params stateRef timersRef = do
       now <- getPOSIXTime
       res <- runRedis conn $ mset [(encodeUtf8 $ T.pack $ instanceId params, BL.toStrict $ encode currentStrategyState),
           (encodeUtf8 $ T.pack $ instanceId params ++ ":last_store", encodeUtf8 $ T.pack $ show now),
-          (encodeUtf8 $ T.pack $ instanceId params ++ ":timers", encodeUtf8 $ T.pack $ show now) ]
+          (encodeUtf8 $ T.pack $ instanceId params ++ ":timers", BL.toStrict $ encode currentTimersState) ]
 
       case res of
         Left _ -> warningM "main" "Unable to save state"
@@ -156,6 +156,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
 
   (tickerList, config) <- loadStrategyConfig params
   stratState <- loadStrategyState params
+  timersState <- loadStrategyTimers params
 
   let instanceParams = StrategyInstanceParams {
     strategyInstanceId = T.pack . instanceId $ params,
@@ -174,7 +175,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
 
   let strategy = mkBarStrategy instanceParams dataDownloadDelta updatedConfig stratState callback
   stateRef <- newIORef stratState
-  timersRef <- newIORef []
+  timersRef <- newIORef timersState
   shutdownMv <- newEmptyMVar
   installHandler sigINT (gracefulShutdown params stateRef timersRef shutdownMv)
   installHandler sigTERM (gracefulShutdown params stateRef timersRef shutdownMv)
@@ -219,6 +220,27 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
       case bigconfig of
         Right conf -> return (confTickers conf, strategyConfig conf)
         Left errmsg -> throw $ UnableToLoadConfig $ (T.pack . show) errmsg)
+
+    loadStrategyTimers :: Params -> IO [UTCTime]
+    loadStrategyTimers params = case redisSocket params of
+      Nothing -> return []
+      Just sock -> do
+        conn <- checkedConnect $ defaultConnectInfo { connectPort = UnixSocket sock }
+        res <- runRedis conn $ get (encodeUtf8 $ T.pack $ instanceId params ++ "timers")
+        case res of
+          Left _ -> do
+            warningM "main" "Unable to load state"
+            return []
+          Right mv -> case mv of
+            Just v -> case eitherDecode $ BL.fromStrict v of
+              Left _ -> do
+                warningM "main" "Unable to load state"
+                return []
+              Right s -> return s
+            Nothing -> do
+              warningM "main" "Unable to load state"
+              return []
+        
 
     loadStrategyState params = case redisSocket params of
       Nothing -> loadStateFromFile (strategyStateFile params)

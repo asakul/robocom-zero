@@ -4,6 +4,7 @@
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE QuasiQuotes        #-}
 
 module ATrade.Driver.Backtest (
   backtestMain
@@ -17,7 +18,8 @@ import           ATrade.Quotes.Finam      as QF
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
                                            StrategyAction (..),
                                            StrategyEnvironment (..),
-                                           runStrategyElement)
+                                           runStrategyElement, st,
+                                           appendToLog)
 import           ATrade.RoboCom.Positions
 import           ATrade.RoboCom.Types     (BarSeries (..), Ticker (..),
                                            Timeframe (..))
@@ -208,8 +210,8 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
 
     isExecutable bar order = case orderPrice order of
       Limit price -> if orderOperation order == Buy
-                        then price <= barLow bar
-                        else price >= barHigh bar
+                        then price >= barLow bar
+                        else price <= barHigh bar
       _ -> True
 
     priceForLimitOrder order bar = case orderPrice order of
@@ -267,8 +269,11 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
     updateBars barMap newbar = M.alter (\case
       Nothing -> Just BarSeries { bsTickerId = barSecurity newbar,
         bsTimeframe = Timeframe 60,
-        bsBars = [newbar] }
-      Just bs -> Just bs { bsBars = newbar : bsBars bs }) (barSecurity newbar) barMap
+        bsBars = [newbar, newbar] }
+      Just bs -> Just bs { bsBars = updateBarList newbar (bsBars bs) }) (barSecurity newbar) barMap
+
+    updateBarList newbar (_:bs) = newbar:newbar:bs
+    updateBarList newbar _ = newbar:[newbar]
 
     fireTimers ts = do
       (firedTimers, otherTimers) <- partition (< ts) <$> gets pendingTimers

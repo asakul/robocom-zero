@@ -28,6 +28,7 @@ import           Control.Lens
 import           Control.Monad.State
 import qualified Data.Map.Strict      as M
 import           Data.Time.Clock
+import           Debug.Trace
 
 -- | Bar aggregator state
 data BarAggregator = BarAggregator {
@@ -84,7 +85,15 @@ handleTick tick = runState $ do
                     return Nothing
                   else
                     return Nothing
-          _ -> return Nothing
+          _ -> case datatype tick of
+            LastTradePrice -> do
+              if volume tick > 0
+                then do
+                  lBars %= M.insert (security tick) series { bsBars = barFromTick tick : [] }
+                  return Nothing
+                else
+                  return Nothing
+            _ -> return Nothing
         _ -> return Nothing
     else
       return Nothing

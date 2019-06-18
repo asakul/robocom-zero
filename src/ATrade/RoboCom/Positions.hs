@@ -170,7 +170,7 @@ orderCorrespondsTo o1 o2 =
 orderDeadline :: Maybe UTCTime -> UTCTime -> Bool
 orderDeadline maybeDeadline lastTs =
   case maybeDeadline of
-    Just deadline -> lastTs >= deadline
+    Just deadline -> lastTs > deadline
     Nothing       -> False
 
 
@@ -203,7 +203,7 @@ dispatchPosition event pos = case posState pos of
       case posCurrentOrder pos of
         Just order -> if orderDeadline (posExecutionDeadline pos) lastTs
           then do -- TODO call TimeoutHandler
-            appendToLog "In PositionWaitingOpen: execution timeout"
+            appendToLog $ [st|"In PositionWaitingOpen: execution timeout: %?/%?"|] (posExecutionDeadline pos) lastTs
             cancelOrder $ orderId order
             return $ pos { posState = PositionWaitingPendingCancellation, posNextState = Just PositionCancelled }
           else case event of
