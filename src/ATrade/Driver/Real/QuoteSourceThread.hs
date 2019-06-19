@@ -24,10 +24,10 @@ import           Control.Monad
 import           System.Log.Logger
 import           System.ZMQ4                    hiding (Event)
 
-startQuoteSourceThread :: Context -> T.Text -> Strategy c s -> BoundedChan Event -> IORef BarAggregator -> (Tick -> Bool) -> IO ThreadId
-startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter = forkIO $ do
+startQuoteSourceThread :: Context -> T.Text -> Strategy c s -> BoundedChan Event -> IORef BarAggregator -> (Tick -> Bool) -> Maybe Int -> IO ThreadId
+startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTimeframe = forkIO $ do
   tickChan <- newBoundedChan 1000
-  bracket (startQuoteSourceClient tickChan (fmap code . (tickers . strategyInstanceParams) $ strategy) ctx qsEp)
+  bracket (startQuoteSourceClient tickChan tickersList ctx qsEp)
     (\qs -> do
       stopQuoteSourceClient qs
       debugM "Strategy" "Quotesource client: stop")
@@ -40,9 +40,17 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter = forkIO $ do
           case handleTick tick aggValue of
             (Just bar, !newAggValue) -> writeChan eventChan (NewBar bar) >> writeIORef agg newAggValue
             (Nothing, !newAggValue) -> writeIORef agg newAggValue
-        QDBar (tf, bar) -> return () -- TODO
-    )
+        QDBar (_, bar) -> do
+          aggValue <- readIORef agg
+          case handleBar bar aggValue of
+            (Just bar', !newAggValue) -> writeChan eventChan (NewBar bar') >> writeIORef agg newAggValue
+            (Nothing, !newAggValue) -> writeIORef agg newAggValue)
   where
     goodTick tick = tickFilter tick &&
       (datatype tick /= LastTradePrice || (datatype tick == LastTradePrice && volume tick > 0))
+
+    tickersList' = fmap code . (tickers . strategyInstanceParams) $ strategy
+    tickersList = case maybeSourceTimeframe of
+      Just tf -> fmap (\x -> T.append x (T.pack $ ":" ++ show tf ++ ";")) tickersList'
+      _ -> tickersList'
 
