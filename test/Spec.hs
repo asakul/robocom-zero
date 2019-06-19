@@ -6,7 +6,7 @@ import qualified Test.RoboCom.Utils
 import           Test.Tasty
 
 main :: IO ()
-main = defaultMain $ testGroup "Tests" [unitTests]
+main = defaultMain $ testGroup "Tests" [unitTests, properties]
 
 unitTests :: TestTree
 unitTests = testGroup "Unit Tests"
@@ -14,3 +14,8 @@ unitTests = testGroup "Unit Tests"
    Test.RoboCom.Positions.unitTests,
    Test.RoboCom.Utils.unitTests,
    Test.BarAggregator.unitTests ]
+
+properties :: TestTree
+properties = testGroup "Properties"
+  [Test.BarAggregator.properties ]
+

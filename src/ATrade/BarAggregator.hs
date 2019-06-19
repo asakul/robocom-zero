@@ -17,6 +17,7 @@ module ATrade.BarAggregator (
   lLastTicks,
   BarAggregator(..),
   mkAggregatorFromBars,
+  handleTicks,
   handleTick,
   handleBar,
   hmsToDiffTime
@@ -53,6 +54,14 @@ lLastTicks = lens lastTicks (\s b -> s { lastTicks = b })
 
 hmsToDiffTime :: Int -> Int -> Int -> DiffTime
 hmsToDiffTime h m s = secondsToDiffTime $ toInteger $ h * 3600 + m * 60 + s
+
+handleTicks :: [Tick] -> BarAggregator -> ([Bar], BarAggregator)
+handleTicks ticks aggregator = foldl f ([], aggregator) ticks
+  where
+    f (bars', agg) tick = let (mbar, agg') = handleTick tick agg in
+      case mbar of
+        Just bar -> (bar : bars', agg')
+        _        -> (bars', agg')
 
 -- | main logic of bar aggregator
 handleTick :: Tick -> BarAggregator -> (Maybe Bar, BarAggregator)

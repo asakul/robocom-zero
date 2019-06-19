@@ -88,12 +88,14 @@ test-suite robots-test
                      , quickcheck-text
                      , quickcheck-instances
                      , containers
+                     , safe
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
   other-modules:     Test.RoboCom.Indicators
                    , Test.RoboCom.Positions
                    , Test.RoboCom.Utils
                    , Test.BarAggregator
+                   , ArbitraryInstances
 
 source-repository head
   type:     git

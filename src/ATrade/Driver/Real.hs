@@ -225,6 +225,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
     loadStrategyTimers params = case redisSocket params of
       Nothing -> return []
       Just sock -> do
+#ifdef linux_HOST_OS
         conn <- checkedConnect $ defaultConnectInfo { connectPort = UnixSocket sock }
         res <- runRedis conn $ get (encodeUtf8 $ T.pack $ instanceId params ++ "timers")
         case res of
@@ -240,6 +241,9 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
             Nothing -> do
               warningM "main" "Unable to load state"
               return []
+#else
+          error "Not implemented"
+#endif
         
 
     loadStrategyState params = case redisSocket params of
