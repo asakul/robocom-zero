@@ -13,6 +13,7 @@ import           ATrade.RoboCom.Types
 import           ATrade.Types
 
 import           Data.IORef
+import           Data.Maybe
 import qualified Data.Text                      as T
 
 import           Control.Concurrent             hiding (readChan, writeChan,
@@ -36,21 +37,20 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
       case qdata of
         QDTick tick -> when (goodTick tick) $ do
           writeChan eventChan (NewTick tick)
-          aggValue <- readIORef agg
-          case handleTick tick aggValue of
-            (Just bar, !newAggValue) -> writeChan eventChan (NewBar bar) >> writeIORef agg newAggValue
-            (Nothing, !newAggValue) -> writeIORef agg newAggValue
+          when (isNothing maybeSourceTimeframe) $ do
+            aggValue <- readIORef agg
+            case handleTick tick aggValue of
+              (Just bar, !newAggValue) -> writeChan eventChan (NewBar bar) >> writeIORef agg newAggValue
+              (Nothing, !newAggValue) -> writeIORef agg newAggValue
         QDBar (_, bar) -> do
           aggValue <- readIORef agg
-          case handleBar bar aggValue of
-            (Just bar', !newAggValue) -> writeChan eventChan (NewBar bar') >> writeIORef agg newAggValue
-            (Nothing, !newAggValue) -> writeIORef agg newAggValue)
+          when (isJust maybeSourceTimeframe) $ do
+            case handleBar bar aggValue of
+              (Just bar', !newAggValue) -> writeChan eventChan (NewBar bar') >> writeIORef agg newAggValue
+              (Nothing, !newAggValue) -> writeIORef agg newAggValue)
   where
     goodTick tick = tickFilter tick &&
       (datatype tick /= LastTradePrice || (datatype tick == LastTradePrice && volume tick > 0))
 
-    tickersList' = fmap code . (tickers . strategyInstanceParams) $ strategy
-    tickersList = case maybeSourceTimeframe of
-      Just tf -> fmap (\x -> T.append x (T.pack $ ":" ++ show tf ++ ";")) tickersList'
-      _ -> tickersList'
+    tickersList = fmap code . (tickers . strategyInstanceParams) $ strategy
 
