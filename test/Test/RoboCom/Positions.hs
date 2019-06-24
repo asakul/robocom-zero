@@ -8,24 +8,22 @@ module Test.RoboCom.Positions
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import           Test.Tasty.QuickCheck as QC
-import           Test.Tasty.SmallCheck as SC
 
 import           ATrade.Types
-import qualified Data.Text             as T
-import qualified Data.Map.Strict     as M
+import qualified Data.List                as L
+import qualified Data.Map.Strict          as M
+import qualified Data.Text                as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
-import qualified Data.List as L
 
 import           ATrade.RoboCom.Monad
 import           ATrade.RoboCom.Positions
-import ATrade.RoboCom.Types
+import           ATrade.RoboCom.Types
 
 data TestState = TestState
   {
     positions :: [Position],
-    testInt :: Int
+    testInt   :: Int
   }
 
 defaultState = TestState {
@@ -56,7 +54,7 @@ unitTests = testGroup "RoboCom.Positions" [
   testEnterAtMarketSendsAction,
   testDefaultHandlerSubmissionDeadline,
   testDefaultHandlerAfterSubmissionPositionIsWaitingOpen,
-  testDefaultHandlerPositionWaitingOpenOrderOpenExecuted1 
+  testDefaultHandlerPositionWaitingOpenOrderOpenExecuted1
   ]
 
 testEnterAtMarket = testCase "enterAtMarket creates position in PositionWaitingOpenSubmission state" $ do
@@ -76,7 +74,7 @@ testEnterAtMarket = testCase "enterAtMarket creates position in PositionWaitingO
     element = enterAtMarket "long" Buy
 
     isPositionWaitingOpenSubmission (PositionWaitingOpenSubmission _) = True
-    isPositionWaitingOpenSubmission _ = False
+    isPositionWaitingOpenSubmission _                                 = False
 
 testEnterAtMarketSendsAction = testCase "enterAtMarket sends ActionSubmitOrder" $ do
   let (newState, actions, _) = runStrategyElement TestConfig defaultState defaultStrategyEnvironment element
@@ -94,8 +92,8 @@ testEnterAtMarketSendsAction = testCase "enterAtMarket sends ActionSubmitOrder" 
     element = enterAtMarket "long" Buy
 
     isActionOrder (ActionOrder _) = True
-    isActionOrder _ = False
-    
+    isActionOrder _               = False
+
 testDefaultHandlerSubmissionDeadline = testCase "defaultHandler after submission deadline marks position as cancelled" $ do
   let (newState, actions, _) = runStrategyElement TestConfig defaultState defaultStrategyEnvironment element
   let (newState', actions', _) = runStrategyElement TestConfig newState defaultStrategyEnvironment { seLastTimestamp = afterDeadline } $ defaultHandler (NewTick tick)
@@ -164,4 +162,4 @@ testDefaultHandlerPositionWaitingOpenOrderOpenExecuted1 = testCase "defaultHandl
               tradeSignalId = SignalId "test_instance" "long" ""
             }
 
-    
+

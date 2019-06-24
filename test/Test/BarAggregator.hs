@@ -10,18 +10,19 @@ import           ATrade.BarAggregator
 import           ATrade.RoboCom.Types
 import           ATrade.Types
 import           Data.List
-import qualified Data.Map.Strict       as M
-import qualified Data.Text             as T
+import qualified Data.Map.Strict      as M
+import qualified Data.Text            as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Safe
 
-import           Test.Tasty
-import           Test.Tasty.HUnit
-import           Test.Tasty.QuickCheck as QC
-import           Test.Tasty.SmallCheck as SC
+import           Hedgehog             as HH
+import qualified Hedgehog.Gen         as Gen
+import qualified Hedgehog.Range       as Range
 
-import           ArbitraryInstances
+import           Test.Tasty
+import           Test.Tasty.Hedgehog
+import           Test.Tasty.HUnit
 
 
 unitTests = testGroup "BarAggregator" [
@@ -36,7 +37,8 @@ unitTests = testGroup "BarAggregator" [
   ]
 
 properties = testGroup "BarAggregator" [
-    prop_allTicksInOneBar
+    prop_allTicksInOneBar,
+    prop_ticksInTwoBars
   ]
 
 testUnknownBarSeries :: TestTree
@@ -193,26 +195,61 @@ testNextBarAfterBarClose = testCase "Three bars (smaller timeframe) - next bar a
             barVolume = v }
 
 prop_allTicksInOneBar :: TestTree
-prop_allTicksInOneBar = QC.testProperty "All ticks in one bar" $ QC.forAll (QC.choose (1, 86400)) $ \timeframe ->
-  QC.forAll (QC.listOf1 (genTick "TEST_TICKER" baseTime timeframe)) $ \ticks ->
-        let ticks' = sortOn timestamp ticks in
-          let (newbars, agg) = handleTicks ticks' (mkAggregator "TEST_TICKER" timeframe) in
-            null newbars &&
-            ((barHigh <$> currentBar "TEST_TICKER" agg) == Just (maximum $ value <$> ticks)) &&
-            ((barLow <$> currentBar "TEST_TICKER" agg) == Just (minimum $ value <$> ticks)) &&
-            ((barOpen <$> currentBar "TEST_TICKER" agg) == (value <$> headMay ticks')) &&
-            ((barClose <$> currentBar "TEST_TICKER" agg) == (value <$> lastMay ticks')) &&
-            ((barVolume <$> currentBar "TEST_TICKER" agg) == Just (sum $ volume <$> ticks))
+prop_allTicksInOneBar = testProperty "All ticks in one bar" $ property $ do
+  tf <- forAll $ Gen.integral (Range.constant 1 86400)
+  ticks <- forAll $ Gen.list (Range.linear 1 100) (genTick "TEST_TICKER" baseTime tf)
+  let ticks' = sortOn timestamp ticks
+  let (newbars, agg) = handleTicks ticks' (mkAggregator "TEST_TICKER" tf)
+  (barHigh <$> currentBar "TEST_TICKER" agg) === Just (maximum $ value <$> ticks)
+  (barLow <$> currentBar "TEST_TICKER" agg) === Just (minimum $ value <$> ticks)
+  (barOpen <$> currentBar "TEST_TICKER" agg) === (value <$> headMay ticks')
+  (barClose <$> currentBar "TEST_TICKER" agg) === (value <$> lastMay ticks')
+  (barVolume <$> currentBar "TEST_TICKER" agg) === Just (sum $ volume <$> ticks)
+  HH.assert $ null newbars
+
   where
     genTick :: T.Text -> UTCTime -> Integer -> Gen Tick
     genTick tickerId base tf = do
-      difftime <- fromRational . toRational . picosecondsToDiffTime <$> choose (0, truncate 1e12 * tf)
-      val <- arbitrary
-      vol <- arbitrary `suchThat` (> 0)
-      return $ Tick tickerId LastTradePrice (difftime `addUTCTime` baseTime) val vol
+      difftime <- fromRational . toRational . picosecondsToDiffTime <$> Gen.integral (Range.linear 0 (truncate 1e12 * tf))
+      val <- fromDouble <$> Gen.double (Range.exponentialFloat 0.00001 100)
+      vol <- Gen.integral (Range.exponential 1 100)
+      return $ Tick tickerId LastTradePrice (difftime `addUTCTime` base) val vol
     mkAggregator tickerId tf = mkAggregatorFromBars (M.singleton tickerId (BarSeries tickerId (Timeframe tf) [])) [(0, 86400)]
 
     currentBar tickerId agg = headMay =<< (bsBars <$> M.lookup tickerId (bars agg))
     baseTime = UTCTime (fromGregorian 1970 1 1) 0
 
+
+prop_ticksInTwoBars :: TestTree
+prop_ticksInTwoBars = testProperty "Ticks in one bar, then in next bar" $ property $ do
+  tf <- forAll $ Gen.integral (Range.constant 1 86400)
+  ticks1 <- forAll $ Gen.list (Range.linear 1 100) (genTick "TEST_TICKER" (baseTime 0) tf)
+  ticks2 <- forAll $ Gen.list (Range.linear 1 100) (genTick "TEST_TICKER" (baseTime $ secondsToDiffTime tf) tf)
+  let ticks1' = sortOn timestamp ticks1
+  let ticks2' = sortOn timestamp ticks2
+  let (_, agg) = handleTicks ticks1' (mkAggregator "TEST_TICKER" tf)
+  let ([newbar], agg') = handleTicks ticks2' agg
+  barSecurity newbar === "TEST_TICKER"
+  (barHigh newbar) === (maximum $ value <$> ticks1)
+  (barLow newbar) === (minimum $ value <$> ticks1)
+  (barOpen newbar) === (value . head $ ticks1')
+  (barClose newbar) === (value . last $ ticks1')
+  (barVolume newbar) === (sum $ volume <$> ticks1)
+  (barHigh <$> currentBar "TEST_TICKER" agg') === Just (maximum $ value <$> ticks2)
+  (barLow <$> currentBar "TEST_TICKER" agg') === Just (minimum $ value <$> ticks2)
+  (barOpen <$> currentBar "TEST_TICKER" agg') === (value <$> headMay ticks2')
+  (barClose <$> currentBar "TEST_TICKER" agg') === (value <$> lastMay ticks2')
+  (barVolume <$> currentBar "TEST_TICKER" agg') === Just (sum $ volume <$> ticks2)
+
+  where
+    genTick :: T.Text -> UTCTime -> Integer -> Gen Tick
+    genTick tickerId base tf = do
+      difftime <- fromRational . toRational . picosecondsToDiffTime <$> Gen.integral (Range.linear 0 (truncate 1e12 * tf))
+      val <- fromDouble <$> Gen.double (Range.exponentialFloat 0.00001 100)
+      vol <- Gen.integral (Range.exponential 1 100)
+      return $ Tick tickerId LastTradePrice (difftime `addUTCTime` base) val vol
+    mkAggregator tickerId tf = mkAggregatorFromBars (M.singleton tickerId (BarSeries tickerId (Timeframe tf) [])) [(0, 86400)]
+
+    currentBar tickerId agg = headMay =<< (bsBars <$> M.lookup tickerId (bars agg))
+    baseTime offset = UTCTime (fromGregorian 1970 1 1) offset
 

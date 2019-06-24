@@ -7,11 +7,9 @@ module Test.RoboCom.Utils
 
 import           Test.Tasty
 import           Test.Tasty.HUnit
-import           Test.Tasty.QuickCheck as QC
-import           Test.Tasty.SmallCheck as SC
 
 import           ATrade.Types
-import qualified Data.Text             as T
+import qualified Data.Text            as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 

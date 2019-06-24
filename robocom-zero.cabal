@@ -79,11 +79,11 @@ test-suite robots-test
                      , libatrade
                      , time
                      , text
+                     , hedgehog
                      , tasty
                      , tasty-hunit
                      , tasty-golden
-                     , tasty-smallcheck
-                     , tasty-quickcheck
+                     , tasty-hedgehog
                      , tasty-hspec
                      , quickcheck-text
                      , quickcheck-instances
@@ -95,7 +95,6 @@ test-suite robots-test
                    , Test.RoboCom.Positions
                    , Test.RoboCom.Utils
                    , Test.BarAggregator
-                   , ArbitraryInstances
 
 source-repository head
   type:     git
