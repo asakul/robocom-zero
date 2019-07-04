@@ -40,13 +40,13 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
           when (isNothing maybeSourceTimeframe) $ do
             aggValue <- readIORef agg
             case handleTick tick aggValue of
-              (Just bar, !newAggValue) -> writeChan eventChan (NewBar bar) >> writeIORef agg newAggValue
+              (Just bar, !newAggValue) -> writeIORef agg newAggValue >> writeChan eventChan (NewBar bar)
               (Nothing, !newAggValue) -> writeIORef agg newAggValue
         QDBar (_, bar) -> do
           aggValue <- readIORef agg
           when (isJust maybeSourceTimeframe) $ do
             case handleBar bar aggValue of
-              (Just bar', !newAggValue) -> writeChan eventChan (NewBar bar') >> writeIORef agg newAggValue
+              (Just bar', !newAggValue) -> writeIORef agg newAggValue >> writeChan eventChan (NewBar bar')
               (Nothing, !newAggValue) -> writeIORef agg newAggValue)
   where
     goodTick tick = tickFilter tick &&
