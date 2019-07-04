@@ -231,7 +231,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
       Just sock -> do
 #ifdef linux_HOST_OS
         conn <- checkedConnect $ defaultConnectInfo { connectPort = UnixSocket sock }
-        res <- runRedis conn $ get (encodeUtf8 $ T.pack $ instanceId params ++ "timers")
+        res <- runRedis conn $ get (encodeUtf8 $ T.pack $ instanceId params ++ ":timers")
         case res of
           Left _ -> do
             warningM "main" "Unable to load state"
