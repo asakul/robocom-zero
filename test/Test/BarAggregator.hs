@@ -33,6 +33,7 @@ unitTests = testGroup "BarAggregator" [
   , testTwoBarsInSameBar
   , testTwoBarsInSameBarLastBar
   , testNextBarAfterBarClose
+  , testUpdateTime
   ]
 
 properties = testGroup "BarAggregator" [
@@ -192,6 +193,37 @@ testNextBarAfterBarClose = testCase "Three bars (smaller timeframe) - next bar a
             barClose = fromDouble c,
             barVolume = v }
 
+testUpdateTime :: TestTree
+testUpdateTime = testCase "updateTime - next bar - creates new bar with zero volume" $ do
+  let series = BarSeries "TEST_TICKER" (Timeframe 3600) []
+  let agg = mkAggregatorFromBars (M.fromList [("TEST_TICKER", series)]) [(0, 86400)]
+  let (_, newagg) = handleBar (bar testTimestamp1 12.00 13.00 10.00 11.00 1) agg
+  let (_, newagg') = handleBar (bar testTimestamp2 12.00 15.00 11.00 12.00 2) newagg
+  let (newBar, newagg'') = updateTime (tick testTimestamp4 13.00 100) newagg'
+  let expectedNewBar = Bar "TEST_TICKER" testTimestamp2 12.00 15.00 10.00 12.00 3
+  let expectedBar = Bar "TEST_TICKER" testTimestamp4 13.00 13.00 13.00 13.00 0
+  (head <$> bsBars <$> (M.lookup "TEST_TICKER" $ bars newagg'')) @?= Just expectedBar
+  newBar @?= Just expectedNewBar
+  where
+    testTimestamp1 = (UTCTime (fromGregorian 1970 1 1) 560)
+    testTimestamp2 = (UTCTime (fromGregorian 1970 1 1) 600)
+    testTimestamp3 = (UTCTime (fromGregorian 1970 1 1) 3600)
+    testTimestamp4 = (UTCTime (fromGregorian 1970 1 1) 3660)
+    tick ts v vol = Tick {
+              security = "TEST_TICKER"
+            , datatype = LastTradePrice
+            , timestamp = ts
+            , value = v
+            , volume = vol }
+    bar ts o h l c v = Bar {
+            barSecurity = "TEST_TICKER",
+            barTimestamp = ts,
+            barOpen = fromDouble o,
+            barHigh = fromDouble h,
+            barLow = fromDouble l,
+            barClose = fromDouble c,
+            barVolume = v }
+
 prop_allTicksInOneBar :: TestTree
 prop_allTicksInOneBar = QC.testProperty "All ticks in one bar" $ QC.forAll (QC.choose (1, 86400)) $ \timeframe ->
   QC.forAll (QC.listOf1 (genTick "TEST_TICKER" baseTime timeframe)) $ \ticks ->
@@ -214,5 +246,4 @@ prop_allTicksInOneBar = QC.testProperty "All ticks in one bar" $ QC.forAll (QC.c
 
     currentBar tickerId agg = headMay =<< (bsBars <$> M.lookup tickerId (bars agg))
     baseTime = UTCTime (fromGregorian 1970 1 1) 0
-
 

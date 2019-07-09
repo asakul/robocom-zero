@@ -19,6 +19,7 @@ module ATrade.BarAggregator (
   mkAggregatorFromBars,
   handleTicks,
   handleTick,
+  updateTime,
   handleBar,
   hmsToDiffTime
 ) where
@@ -143,6 +144,42 @@ handleTick tick = runState $ do
           barLow = barClose bar,
           barClose = barClose bar,
           barVolume = 0 }
+
+updateTime :: Tick -> BarAggregator -> (Maybe Bar, BarAggregator)
+updateTime tick = runState $ do
+  lLastTicks %= M.insert (security tick, datatype tick) tick
+  tws <- gets tickTimeWindows
+  mybars <- gets bars
+  if (any (isInTimeInterval tick) tws)
+    then
+      case M.lookup (security tick) mybars of
+        Just series -> case bsBars series of
+          (b:bs) -> do
+            let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
+            if currentBn == barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
+              then do
+                lBars %= M.insert (security tick) series { bsBars = updateBarTimestamp b tick : bs }
+                return Nothing
+              else do
+                lBars %= M.insert (security tick) series { bsBars = emptyBarFromTick tick : b : bs }
+                return $ Just b
+          _ -> return Nothing
+        _ -> return Nothing
+    else
+      return Nothing
+  where
+    isInTimeInterval t (a, b) = (utctDayTime . timestamp) t >= a && (utctDayTime . timestamp) t <= b
+    emptyBarFromTick !newtick = Bar { barSecurity = security newtick,
+      barTimestamp = timestamp newtick,
+      barOpen = value newtick,
+      barHigh = value newtick,
+      barLow = value newtick,
+      barClose = value newtick,
+      barVolume = 0 }
+
+    updateBarTimestamp !bar newtick = bar { barTimestamp = newTimestamp }
+      where
+        newTimestamp = timestamp newtick
 
 handleBar :: Bar -> BarAggregator -> (Maybe Bar, BarAggregator)
 handleBar bar = runState $ do
