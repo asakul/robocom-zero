@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MultiWayIf   #-}
 
 {-|
  - Module       : ATrade.BarAggregator
@@ -156,13 +157,15 @@ updateTime tick = runState $ do
         Just series -> case bsBars series of
           (b:bs) -> do
             let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
-            if currentBn == barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
-              then do
-                lBars %= M.insert (security tick) series { bsBars = updateBarTimestamp b tick : bs }
-                return Nothing
-              else do
-                lBars %= M.insert (security tick) series { bsBars = emptyBarFromTick tick : b : bs }
-                return $ Just b
+            let thisBn = barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
+            if
+              | currentBn == thisBn -> do
+                  lBars %= M.insert (security tick) series { bsBars = updateBarTimestamp b tick : bs }
+                  return Nothing
+              | currentBn < thisBn -> do
+                  lBars %= M.insert (security tick) series { bsBars = emptyBarFromTick tick : b : bs }
+                  return $ Just b
+              | otherwise -> return Nothing
           _ -> return Nothing
         _ -> return Nothing
     else
