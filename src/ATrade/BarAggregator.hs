@@ -194,11 +194,11 @@ handleBar bar = runState $ do
         Just series -> case bsBars series of
           (b:bs) -> do
             let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
-            if currentBn == barNumber (barTimestamp bar) (tfSeconds $ bsTimeframe series)
-              then do
+            if
+              | currentBn == barNumber (barTimestamp bar) (tfSeconds $ bsTimeframe series) -> do
                 lBars %= M.insert (barSecurity bar) series { bsBars = updateBar b bar : bs }
                 return Nothing
-              else
+              | currentBn < barNumber (barTimestamp bar) (tfSeconds $ bsTimeframe series) -> do
                 if barEndTime b (tfSeconds $ bsTimeframe series) == barTimestamp bar
                   then do
                     lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : (updateBar b bar : bs) }
