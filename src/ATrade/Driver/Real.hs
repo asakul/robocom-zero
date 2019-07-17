@@ -423,6 +423,7 @@ barStrategyDriver mbSourceTimeframe tickFilter strategy stateRef timersRef shutd
             QQ.endDate = utctDay now,
             QQ.period = tf }
           debugM "Strategy" $ "Obtained " ++ show (length historyBars) ++ " bars"
+          debugM "Strategy" $ show (take 20 historyBars)
           return (code t, BarSeries { bsTickerId = code t, bsTimeframe = Timeframe (timeframeSeconds t), bsBars = historyBars })
         _ -> return (code t, BarSeries { bsTickerId = code t, bsTimeframe = Timeframe (timeframeSeconds t), bsBars = [] })
 
