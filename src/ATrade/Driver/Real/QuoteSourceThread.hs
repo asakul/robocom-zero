@@ -28,7 +28,7 @@ import           System.ZMQ4                    hiding (Event)
 startQuoteSourceThread :: Context -> T.Text -> Strategy c s -> BoundedChan Event -> IORef BarAggregator -> (Tick -> Bool) -> Maybe Int -> IO ThreadId
 startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTimeframe = forkIO $ do
   tickChan <- newBoundedChan 1000
-  bracket (startQuoteSourceClient tickChan (fmap applyTimeframeSpec tickersList) ctx qsEp)
+  bracket (startQuoteSourceClient tickChan tickersList ctx qsEp defaultClientSecurityParams)
     (\qs -> do
       stopQuoteSourceClient qs
       debugM "Strategy" "Quotesource client: stop")

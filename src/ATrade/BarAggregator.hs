@@ -227,7 +227,7 @@ handleBar bar = runState $ do
 
     emptyBarFrom bar' = Bar {
           barSecurity = barSecurity bar',
-          barTimestamp = barTimestamp bar',
+          barTimestamp = 0.000001 `addUTCTime` barTimestamp bar',
           barOpen = barClose bar',
           barHigh = barClose bar',
           barLow = barClose bar',
