@@ -13,7 +13,9 @@ import           Data.Binary.IEEE754
 import qualified Data.ByteString.Lazy  as BL
 import qualified Data.Text             as T
 import           Data.Time.Calendar
+import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
+import           Data.Time.Format
 import           System.Log.Logger
 import           System.ZMQ4
 
@@ -48,10 +50,13 @@ data RequestParams =
     period    :: Period
     } deriving (Show, Eq)
 
+printDatetime :: UTCTime -> String
+printDatetime = formatTime defaultTimeLocale (iso8601DateFormat (Just "%H:%M:%S"))
+
 instance ToJSON RequestParams where
   toJSON p = object [ "ticker" .= ticker p,
-    "from" .= showGregorian (startDate p),
-    "to" .=  showGregorian (endDate p),
+    "from" .= printDatetime (UTCTime (startDate p) 0),
+    "to" .=  printDatetime (UTCTime (endDate p) 0),
     "timeframe" .= show (period p) ]
 
 getQuotes :: Context -> RequestParams -> IO [Bar]
