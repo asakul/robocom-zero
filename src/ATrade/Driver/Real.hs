@@ -144,7 +144,6 @@ storeState params stateRef timersRef = do
       return ()
 #endif
 
-
 gracefulShutdown :: (ToJSON s) => Params -> IORef s -> IORef [UTCTime] -> MVar () -> Signal -> IO ()
 gracefulShutdown params stateRef timersRef shutdownMv _ = do
   infoM "main" "Shutdown, saving state"
@@ -179,6 +178,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
 
   let strategy = mkBarStrategy instanceParams dataDownloadDelta updatedConfig stratState callback
   stateRef <- newIORef stratState
+  configRef <- newIORef config
   timersRef <- newIORef timersState
   shutdownMv <- newEmptyMVar
   installHandler sigINT (gracefulShutdown params stateRef timersRef shutdownMv)
@@ -191,7 +191,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
     storeState params stateRef timersRef
 
   debugM "main" "Starting strategy driver"
-  barStrategyDriver (sourceBarTimeframe params) tickFilter strategy stateRef timersRef shutdownMv `finally` killThread stateSavingThread
+  barStrategyDriver (sourceBarTimeframe params) tickFilter strategy configRef stateRef timersRef shutdownMv `finally` killThread stateSavingThread
   where
     tickFilter :: Tick -> Bool
     tickFilter tick =
@@ -293,8 +293,8 @@ mkBarStrategy instanceParams dd params initialState cb = BarStrategy {
 
 -- | Main function which handles incoming events (ticks/orders), passes them to strategy callback
 -- and executes returned strategy actions
-barStrategyDriver :: Maybe Int -> (Tick -> Bool) -> Strategy c s -> IORef s -> IORef [UTCTime] -> MVar () -> IO ()
-barStrategyDriver mbSourceTimeframe tickFilter strategy stateRef timersRef shutdownVar = do
+barStrategyDriver :: Maybe Int -> (Tick -> Bool) -> Strategy c s -> IORef c -> IORef s -> IORef [UTCTime] -> MVar () -> IO ()
+barStrategyDriver mbSourceTimeframe tickFilter strategy configRef stateRef timersRef shutdownVar = do
   -- Make channels
   -- Event channel is for strategy events, like new tick arrival, or order execution notification
   eventChan <- BC.newBoundedChan 1000
@@ -347,8 +347,8 @@ barStrategyDriver mbSourceTimeframe tickFilter strategy stateRef timersRef shutd
         if event /= Shutdown
           then do
             currentBars <- bars <$> readIORef agg
-            let params = strategyParams strategy'
-            let curState = currentState strategy'
+            params <- readIORef configRef
+            curState <- readIORef stateRef
             let instId = strategyInstanceId . strategyInstanceParams $ strategy'
             let acc = strategyAccount . strategyInstanceParams $ strategy'
             let vol = strategyVolume . strategyInstanceParams $ strategy'
