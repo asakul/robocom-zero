@@ -2,15 +2,15 @@
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
 {-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
-{-# LANGUAGE QuasiQuotes        #-}
 
 module ATrade.Driver.Backtest (
   backtestMain
 ) where
 
-import           ATrade.Driver.Real.Types (InitializationCallback,
+import           ATrade.Driver.Types      (InitializationCallback,
                                            Strategy (..),
                                            StrategyInstanceParams (..))
 import           ATrade.Exceptions
@@ -18,8 +18,7 @@ import           ATrade.Quotes.Finam      as QF
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
                                            StrategyAction (..),
                                            StrategyEnvironment (..),
-                                           runStrategyElement, st,
-                                           appendToLog)
+                                           appendToLog, runStrategyElement, st)
 import           ATrade.RoboCom.Positions
 import           ATrade.RoboCom.Types     (BarSeries (..), Ticker (..),
                                            Timeframe (..))
@@ -273,7 +272,7 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
       Just bs -> Just bs { bsBars = updateBarList newbar (bsBars bs) }) (barSecurity newbar) barMap
 
     updateBarList newbar (_:bs) = newbar:newbar:bs
-    updateBarList newbar _ = newbar:[newbar]
+    updateBarList newbar _      = newbar:[newbar]
 
     fireTimers ts = do
       (firedTimers, otherTimers) <- partition (< ts) <$> gets pendingTimers

@@ -1,6 +1,7 @@
 {-# LANGUAGE RankNTypes #-}
 
-module ATrade.Driver.Real.Types (
+module ATrade.Driver.Types
+(
   Strategy(..),
   StrategyInstanceParams(..),
   InitializationCallback

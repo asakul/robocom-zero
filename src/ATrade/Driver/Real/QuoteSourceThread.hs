@@ -6,7 +6,7 @@ module ATrade.Driver.Real.QuoteSourceThread
 ) where
 
 import           ATrade.BarAggregator
-import           ATrade.Driver.Real.Types
+import           ATrade.Driver.Types
 import           ATrade.QuoteSource.Client
 import           ATrade.RoboCom.Monad
 import           ATrade.RoboCom.Types

@@ -68,7 +68,7 @@ library
   other-modules:       ATrade.Exceptions
                      , ATrade.Driver.Real.BrokerClientThread
                      , ATrade.Driver.Real.QuoteSourceThread
-                     , ATrade.Driver.Real.Types
+                     , ATrade.Driver.Types
 
 test-suite robots-test
   type:                exitcode-stdio-1.0

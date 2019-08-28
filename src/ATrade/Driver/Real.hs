@@ -45,7 +45,7 @@ import ATrade.RoboCom.Monad (StrategyMonad, StrategyAction(..), EventCallback, E
 import ATrade.BarAggregator
 import ATrade.Driver.Real.BrokerClientThread
 import ATrade.Driver.Real.QuoteSourceThread
-import ATrade.Driver.Real.Types (Strategy(..), StrategyInstanceParams(..), InitializationCallback)
+import ATrade.Driver.Types (Strategy(..), StrategyInstanceParams(..), InitializationCallback)
 import ATrade.RoboCom.Types (BarSeries(..), Ticker(..), Timeframe(..))
 import ATrade.Exceptions
 import ATrade.Quotes.Finam as QF
