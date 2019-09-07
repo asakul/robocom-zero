@@ -370,7 +370,7 @@ barStrategyDriver ctx mbSourceTimeframe tickFilter strategy configRef stateRef t
       | otherwise ->
           M.fromList <$> mapM (loadTickerFromQHP ctx ((strategyHistoryProvider . strategyInstanceParams) strategy)) (tickers . strategyInstanceParams $ strategy)
 
-  agg <- lift . newIORef $ mkAggregatorFromBars historyBars [(hmsToDiffTime 6 50 0, hmsToDiffTime 21 0 0)]
+  agg <- lift . newIORef $ mkAggregatorFromBars historyBars [(hmsToDiffTime 6 50 0, hmsToDiffTime 21 10 0)]
   eventChan <- asks envEventChan
   brokerChan <- asks envBrokerChan
   bracket (lift $ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter mbSourceTimeframe) (lift . killThread) (\_ -> do
@@ -402,6 +402,7 @@ barStrategyDriver ctx mbSourceTimeframe tickFilter strategy configRef stateRef t
         event <- lift $ readChan eventChan
         if event /= Shutdown
           then do
+            lift $ debugM "Strategy" $ "event: " ++ show event
             env <- getEnvironment
             let newTimestamp = case event of
                   NewTick tick -> timestamp tick
