@@ -46,7 +46,7 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
             Just _ -> return ()
         QDBar (incomingTf, bar) -> do
           aggValue <- readIORef agg
-          debugM "QSThread" $ "Incoming bar: " ++ show incomingTf ++ ": " ++ show bar
+          -- debugM "QSThread" $ "Incoming bar: " ++ show incomingTf ++ ": " ++ show bar
           case maybeSourceTimeframe of
             Just tf -> when (tf == unBarTimeframe incomingTf) $
               case handleBar bar aggValue of
