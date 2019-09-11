@@ -204,8 +204,13 @@ handleBar bar = runState $ do
                     lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : (updateBar b bar : bs) }
                     return . Just $ updateBar b bar
                   else do
-                    lBars %= M.insert (barSecurity bar) series { bsBars = bar : b : bs }
-                    return . Just $ b
+                    if barVolume b > 0
+                      then do
+                        lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : bar : b : bs }
+                        return . Just $ bar
+                      else do
+                        lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : bar : bs }
+                        return . Just $ bar
               | otherwise -> return Nothing
           _      -> do
             lBars %= M.insert (barSecurity bar) series { bsBars = [bar] }
