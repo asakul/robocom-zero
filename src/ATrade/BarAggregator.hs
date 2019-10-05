@@ -191,7 +191,7 @@ handleBar bar = runState $ do
     Just series -> case bsBars series of
       (b:bs) -> do
         lBars %= M.insert (barSecurity bar) series { bsBars = bar : b : bs }
-        return . Just $ b
+        return . Just $ bar
       _      -> do
         lBars %= M.insert (barSecurity bar) series { bsBars = [bar] }
         return Nothing
