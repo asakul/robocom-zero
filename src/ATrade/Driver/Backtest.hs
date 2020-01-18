@@ -1,6 +1,8 @@
 {-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RankNTypes                 #-}
@@ -16,7 +18,7 @@ import           ATrade.Driver.Types      (InitializationCallback,
 import           ATrade.Exceptions
 import           ATrade.Quotes.Finam      as QF
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
-                                           StrategyAction (..),
+                                           MonadRobot (..), StrategyAction (..),
                                            StrategyEnvironment (..),
                                            appendToLog, runStrategyElement, st)
 import           ATrade.RoboCom.Positions
@@ -313,4 +315,15 @@ defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "
 
 newtype BacktestingMonad s c a = BacktestingMonad { unBacktestingMonad :: State (BacktestState s c) a }
   deriving (Functor, Applicative, Monad, MonadState (BacktestState s c))
+
+instance MonadRobot (BacktestingMonad s c) s c where
+  submitOrder order = undefined
+  cancelOrder oid = undefined
+  appendToLog txt = undefined
+  setupTimer time = undefined
+  enqueueIOAction actionId action = undefined
+  getConfig = undefined
+  getState = undefined
+  setState s = undefined
+  getEnvironment = undefined
 
