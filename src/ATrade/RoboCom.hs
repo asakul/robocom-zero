@@ -2,7 +2,8 @@
 
 module ATrade.RoboCom
 (
-  robocom_version
+    robocom_version
+  , robocom_gitrev
 ) where
 
 import           Data.Version
