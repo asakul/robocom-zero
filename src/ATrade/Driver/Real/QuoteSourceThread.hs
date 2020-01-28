@@ -31,7 +31,7 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
   bracket (startQuoteSourceClient tickChan tickersList ctx qsEp defaultClientSecurityParams)
     (\qs -> do
       stopQuoteSourceClient qs
-      debugM "Strategy" "Quotesource client: stop")
+      debugM "QSThread" "Quotesource client: stop")
     (\_ -> forever $ do
       qdata <- readChan tickChan
       case qdata of
@@ -46,6 +46,7 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
             Just _ -> return ()
         QDBar (incomingTf, bar) -> do
           aggValue <- readIORef agg
+          -- debugM "QSThread" $ "Incoming bar: " ++ show incomingTf ++ ": " ++ show bar
           case maybeSourceTimeframe of
             Just tf -> when (tf == unBarTimeframe incomingTf) $
               case handleBar bar aggValue of
