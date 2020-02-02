@@ -20,7 +20,8 @@ import           ATrade.Quotes.Finam      as QF
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
                                            MonadRobot (..), StrategyAction (..),
                                            StrategyEnvironment (..),
-                                           appendToLog, runStrategyElement, st)
+                                           appendToLog, runStrategyElement,
+                                           seBars, seLastTimestamp, st)
 import           ATrade.RoboCom.Positions
 import           ATrade.RoboCom.Types     (BarSeries (..), Ticker (..),
                                            Timeframe (..))
@@ -28,6 +29,7 @@ import           ATrade.Types
 import           Conduit                  (awaitForever, runConduit, yield,
                                            (.|))
 import           Control.Exception.Safe
+import           Control.Lens
 import           Control.Monad.ST         (runST)
 import           Control.Monad.State
 import           Data.Aeson               (FromJSON (..), Result (..),
@@ -162,9 +164,8 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
 
     backtestLoop = awaitForever (\bar -> do
       env <- gets strategyEnvironment
-      let oldTimestamp = seLastTimestamp env
       let newTimestamp = barTimestamp bar
-      let newenv = env { seBars = updateBars (seBars env) bar, seLastTimestamp = newTimestamp }
+      let newenv = env & seBars %~ (flip updateBars $ bar) & seLastTimestamp .~ newTimestamp
       curState <- gets robotState
       modify' (\s -> s { strategyEnvironment = newenv })
       handleEvents [NewBar bar])
@@ -232,7 +233,7 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
         order `executeAtPrice` barOpen bar
 
     executeAtPrice order price = do
-      ts <- seLastTimestamp <$> gets strategyEnvironment
+      ts <- view seLastTimestamp <$> gets strategyEnvironment
       modify' (\s -> s { tradesLog = mkTrade order price ts : tradesLog s })
       return $ OrderUpdate (orderId order) Executed
 

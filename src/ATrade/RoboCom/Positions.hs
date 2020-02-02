@@ -73,6 +73,7 @@ import           ATrade.RoboCom.Monad
 import           ATrade.RoboCom.Types
 import           ATrade.Types
 
+import           Control.Lens
 import           Control.Monad
 import           Ether
 
@@ -186,7 +187,7 @@ dispatchPosition event pos = case posState pos of
   PositionCancelled -> handlePositionCancelled pos
   where
     handlePositionWaitingOpenSubmission pendingOrder = do
-      lastTs <- seLastTimestamp <$> getEnvironment
+      lastTs <- view seLastTimestamp <$> getEnvironment
       if orderDeadline (posSubmissionDeadline pos) lastTs
         then return $ pos { posState = PositionCancelled } -- TODO call TimeoutHandler if present
         else case event of
@@ -199,7 +200,7 @@ dispatchPosition event pos = case posState pos of
           _ -> return pos
 
     handlePositionWaitingOpen = do
-      lastTs <- seLastTimestamp <$> getEnvironment
+      lastTs <- view seLastTimestamp <$> getEnvironment
       case posCurrentOrder pos of
         Just order -> if orderDeadline (posExecutionDeadline pos) lastTs
           then do -- TODO call TimeoutHandler
@@ -238,7 +239,7 @@ dispatchPosition event pos = case posState pos of
           return pos
 
     handlePositionOpen = do
-      lastTs <- seLastTimestamp <$> getEnvironment
+      lastTs <- view seLastTimestamp <$> getEnvironment
       if
         | orderDeadline (posSubmissionDeadline pos) lastTs -> do
             appendToLog $ [st|PositionId: %? : Missed submission deadline: %?, remaining in PositionOpen state|] (posId pos) (posSubmissionDeadline pos)
@@ -261,7 +262,7 @@ dispatchPosition event pos = case posState pos of
           _ -> return pos
 
     handlePositionWaitingPendingCancellation = do
-      lastTs <- seLastTimestamp <$> getEnvironment
+      lastTs <- view seLastTimestamp <$> getEnvironment
       if not $ orderDeadline (posSubmissionDeadline pos) lastTs
         then case (event, posCurrentOrder pos, posNextState pos) of
             (OrderUpdate _ newstate, Just _, Just (PositionWaitingCloseSubmission nextOrder)) ->
@@ -280,7 +281,7 @@ dispatchPosition event pos = case posState pos of
           return pos { posState = PositionCancelled }
 
     handlePositionWaitingCloseSubmission pendingOrder = do
-      lastTs <- seLastTimestamp <$> getEnvironment
+      lastTs <- view seLastTimestamp <$> getEnvironment
       if orderDeadline (posSubmissionDeadline pos) lastTs
         then do
           case posCurrentOrder pos of
@@ -297,7 +298,7 @@ dispatchPosition event pos = case posState pos of
           _ -> return pos
 
     handlePositionWaitingClose = do
-      lastTs <- seLastTimestamp <$> getEnvironment
+      lastTs <- view seLastTimestamp <$> getEnvironment
       if orderDeadline (posExecutionDeadline pos) lastTs
         then do
           case posCurrentOrder pos of
@@ -335,7 +336,7 @@ dispatchPosition event pos = case posState pos of
 
 newPosition :: (StateHasPositions s, MonadRobot m c s) => Order -> T.Text -> TickerId -> Operation -> Int -> NominalDiffTime -> m Position
 newPosition order account tickerId operation quantity submissionDeadline = do
-  lastTs <- seLastTimestamp <$> getEnvironment
+  lastTs <- view seLastTimestamp <$> getEnvironment
   let position = Position {
     posId = [st|%?/%?/%?/%?/%?|] account tickerId operation quantity lastTs,
     posAccount = account,
@@ -359,7 +360,7 @@ newPosition order account tickerId operation quantity submissionDeadline = do
 
 reapDeadPositions :: (StateHasPositions s) => EventCallback c s
 reapDeadPositions _ = do
-  ts <- seLastTimestamp <$> getEnvironment
+  ts <- view seLastTimestamp <$> getEnvironment
   when (floor (utctDayTime ts) `mod` 300 == 0) $ modifyPositions (L.filter (not . posIsDead))
 
 defaultHandler :: (StateHasPositions s) => EventCallback c s
@@ -377,15 +378,15 @@ modifyPosition f oldpos = do
 
 getCurrentTicker :: (ParamsHasMainTicker c, MonadRobot m c s) => m [Bar]
 getCurrentTicker = do
-  bars <- seBars <$> getEnvironment
-  maybeBars <- flip M.lookup bars .  mainTicker <$> getConfig
+  mainTicker' <- mainTicker <$> getConfig
+  maybeBars <- view (seBars . at mainTicker') <$> getEnvironment
   case maybeBars of
     Just b -> return $ bsBars b
     _      -> return []
 
 getCurrentTickerSeries :: (ParamsHasMainTicker c, MonadRobot m c s) => m (Maybe BarSeries)
 getCurrentTickerSeries = do
-  bars <- seBars <$> getEnvironment
+  bars <- view seBars <$> getEnvironment
   flip M.lookup bars . mainTicker <$> getConfig
 
 getLastActivePosition :: (StateHasPositions s, MonadRobot m c s) => m (Maybe Position)
@@ -449,7 +450,7 @@ onActionCompletedEvent event f = case event of
 enterAtMarket :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Operation -> m Position
 enterAtMarket signalName operation = do
   env <- getEnvironment
-  enterAtMarketWithParams (seAccount env) (seVolume env) (SignalId (seInstanceId env) signalName "") operation
+  enterAtMarketWithParams (env ^. seAccount) (env ^. seVolume) (SignalId (env ^. seInstanceId) signalName "") operation
 
 enterAtMarketWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Int -> SignalId -> Operation -> m Position
 enterAtMarketWithParams account quantity signalId operation = do
@@ -469,12 +470,12 @@ enterAtMarketWithParams account quantity signalId operation = do
 enterAtLimit :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Price -> Operation -> m Position
 enterAtLimit timeToCancel signalName price operation = do
   env <- getEnvironment
-  enterAtLimitWithParams timeToCancel (seAccount env) (seVolume env) (SignalId (seInstanceId env) signalName "") price operation
+  enterAtLimitWithParams timeToCancel (env ^. seAccount) (env ^. seVolume) (SignalId (env ^. seInstanceId) signalName "") price operation
 
 enterAtLimitWithVolume :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Price -> Int -> Operation -> m Position
 enterAtLimitWithVolume timeToCancel signalName price vol operation = do
-  acc <- seAccount <$> getEnvironment
-  inst <- seInstanceId <$> getEnvironment
+  acc <- view seAccount <$> getEnvironment
+  inst <- view seInstanceId <$> getEnvironment
   enterAtLimitWithParams timeToCancel acc vol (SignalId inst signalName "") price operation
 
 enterAtLimitWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
@@ -484,20 +485,20 @@ enterAtLimitWithParams timeToCancel account quantity signalId price operation = 
 
 enterAtLimitForTickerWithVolume :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Price -> Int -> Operation -> m Position
 enterAtLimitForTickerWithVolume tickerId timeToCancel signalName price vol operation = do
-  acc <- seAccount <$> getEnvironment
-  inst <- seInstanceId <$> getEnvironment
+  acc <- view seAccount <$> getEnvironment
+  inst <- view seInstanceId <$> getEnvironment
   enterAtLimitForTickerWithParams tickerId timeToCancel acc vol (SignalId inst signalName "") price operation
 
 enterAtLimitForTicker :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Price -> Operation -> m Position
 enterAtLimitForTicker tickerId timeToCancel signalName price operation = do
-  acc <- seAccount <$> getEnvironment
-  inst <- seInstanceId <$> getEnvironment
-  vol <- seVolume <$> getEnvironment
+  acc <- view seAccount <$> getEnvironment
+  inst <- view seInstanceId <$> getEnvironment
+  vol <- view seVolume <$> getEnvironment
   enterAtLimitForTickerWithParams tickerId timeToCancel acc vol (SignalId inst signalName "") price operation
 
 enterAtLimitForTickerWithParams :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation = do
-  lastTs <- seLastTimestamp <$> getEnvironment
+  lastTs <- view seLastTimestamp <$> getEnvironment
   submitOrder order
   appendToLog $ [st|enterAtLimit: %?, deadline: %?|] tickerId (timeToCancel `addUTCTime` lastTs)
   newPosition order account tickerId operation quantity 20 >>=
@@ -532,8 +533,8 @@ enterShortAtLimitForTicker tickerId timeToCancel price signalName = enterAtLimit
 
 exitAtMarket :: (StateHasPositions s, MonadRobot m c s) => Position -> T.Text -> m Position
 exitAtMarket position signalName = do
-  inst <- seInstanceId <$> getEnvironment
-  lastTs <- seLastTimestamp <$> getEnvironment
+  inst <- view seInstanceId <$> getEnvironment
+  lastTs <- view seLastTimestamp <$> getEnvironment
   case posCurrentOrder position of
     Just order -> do
       cancelOrder (orderId order)
@@ -563,8 +564,8 @@ exitAtMarket position signalName = do
 
 exitAtLimit :: (StateHasPositions s, MonadRobot m c s) => NominalDiffTime -> Price -> Position -> T.Text -> m Position
 exitAtLimit timeToCancel price position signalName = do
-  lastTs <- seLastTimestamp <$> getEnvironment
-  inst <- seInstanceId <$> getEnvironment
+  lastTs <- view seLastTimestamp <$> getEnvironment
+  inst <- view seInstanceId <$> getEnvironment
   case posCurrentOrder position of
     Just order -> cancelOrder (orderId order)
     Nothing    -> doNothing

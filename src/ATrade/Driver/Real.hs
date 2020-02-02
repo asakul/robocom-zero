@@ -31,6 +31,7 @@ import Control.Monad.Reader
 import Control.Concurrent hiding (writeChan, readChan, writeList2Chan, yield)
 import Control.Concurrent.BoundedChan as BC
 import Control.Exception.Safe
+import Control.Lens hiding (Context, (.=))
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.List as L
@@ -46,7 +47,7 @@ import Data.Maybe
 import Data.Monoid
 import Database.Redis hiding (info, decode)
 import ATrade.Types
-import ATrade.RoboCom.Monad (StrategyMonad, StrategyAction(..), EventCallback, Event(..), runStrategyElement, StrategyEnvironment(..), Event(..), MonadRobot(..))
+import ATrade.RoboCom.Monad (StrategyMonad, StrategyAction(..), EventCallback, Event(..), runStrategyElement, StrategyEnvironment(..), seBars, seLastTimestamp, Event(..), MonadRobot(..))
 import ATrade.BarAggregator
 import ATrade.Driver.Real.BrokerClientThread
 import ATrade.Driver.Real.QuoteSourceThread
@@ -159,7 +160,7 @@ instance MonadRobot (App c s) c s where
     env <- lift $ readIORef envRef
     nowRef <- asks envLastTimestamp
     now <- lift $ readIORef nowRef
-    return $ env { seBars = bars agg, seLastTimestamp = now }
+    return $ env & seBars .~ bars agg & seLastTimestamp .~ now
 
 data BigConfig c = BigConfig {
   confTickers :: [Ticker],
@@ -244,11 +245,11 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
     storeState params stateRef timersRef
 
   straEnv <- newIORef StrategyEnvironment {
-        seInstanceId = strategyInstanceId . strategyInstanceParams $ strategy,
-        seAccount = strategyAccount . strategyInstanceParams $ strategy,
-        seVolume = strategyVolume . strategyInstanceParams $ strategy,
-        seBars = M.empty,
-        seLastTimestamp = UTCTime (fromGregorian 1970 1 1) 0
+        _seInstanceId = strategyInstanceId . strategyInstanceParams $ strategy,
+        _seAccount = strategyAccount . strategyInstanceParams $ strategy,
+        _seVolume = strategyVolume . strategyInstanceParams $ strategy,
+        _seBars = M.empty,
+        _seLastTimestamp = UTCTime (fromGregorian 1970 1 1) 0
   }
   -- Event channel is for strategy events, like new tick arrival, or order execution notification
   eventChan <- BC.newBoundedChan 1000
@@ -515,7 +516,7 @@ barStrategyDriver ctx mbSourceTimeframe tickFilter strategy configRef stateRef t
             env <- getEnvironment
             let newTimestamp = case event of
                   NewTick tick -> timestamp tick
-                  _ -> seLastTimestamp env
+                  _ -> env ^. seLastTimestamp
             nowRef <- asks envLastTimestamp
             lift $ writeIORef nowRef newTimestamp
 

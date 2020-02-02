@@ -14,6 +14,11 @@ module ATrade.RoboCom.Monad (
   RActions,
   REnv,
   StrategyEnvironment(..),
+  seInstanceId,
+  seAccount,
+  seVolume,
+  seBars,
+  seLastTimestamp,
   StrategyElement,
   runStrategyElement,
   EventCallback,
@@ -31,11 +36,11 @@ import           ATrade.Types
 
 import           Ether
 
+import           Control.Lens
 import           Data.Aeson.Types
 import qualified Data.Text            as T
 import           Data.Time.Clock
 import           Text.Printf.TH
-
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
   submitOrder :: Order -> m ()
@@ -84,12 +89,14 @@ data StrategyAction = ActionOrder Order
   | ActionIO Int (IO Value)
 
 data StrategyEnvironment = StrategyEnvironment {
-  seInstanceId    :: !T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
-  seAccount       :: !T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
-  seVolume        :: !Int, -- ^ Volume to use for this instance (in lots/contracts)
-  seBars          :: !Bars, -- ^ List of tickers which is used by this strategy
-  seLastTimestamp :: !UTCTime
+  _seInstanceId    :: !T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
+  _seAccount       :: !T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
+  _seVolume        :: !Int, -- ^ Volume to use for this instance (in lots/contracts)
+  _seBars          :: !Bars, -- ^ List of tickers which is used by this strategy
+  _seLastTimestamp :: !UTCTime
 } deriving (Eq)
+makeLenses ''StrategyEnvironment
+
 
 instance Show StrategyAction where
   show (ActionOrder order)     = "ActionOrder " ++ show order
