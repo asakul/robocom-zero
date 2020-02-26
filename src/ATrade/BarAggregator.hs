@@ -189,23 +189,12 @@ handleBar bar = runState $ do
   mybars <- gets bars
   case M.lookup (barSecurity bar) mybars of
     Just series -> case bsBars series of
-      (_:bs) -> do
-        lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : bar : bs }
+      (b:bs) -> do
+        lBars %= M.insert (barSecurity bar) series { bsBars = bar : b : bs }
         return . Just $ bar
       _      -> do
-        lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : [bar] }
+        lBars %= M.insert (barSecurity bar) series { bsBars = [bar] }
         return Nothing
     _ -> return Nothing
-  where
-    emptyBarFrom bar' = newBar
-      where
-        newBar = Bar {
-          barSecurity = barSecurity bar',
-          barTimestamp = barTimestamp bar',
-          barOpen = barClose bar',
-          barHigh = barClose bar',
-          barLow = barClose bar',
-          barClose = barClose bar',
-          barVolume = 0 }
 
 
