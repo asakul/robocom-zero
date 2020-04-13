@@ -19,10 +19,10 @@ import           ATrade.Driver.Types      (InitializationCallback,
 import           ATrade.Exceptions
 import           ATrade.Quotes.Finam      as QF
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
-                                           MonadRobot (..), StrategyAction (..),
+                                           MonadRobot (..),
                                            StrategyEnvironment (..),
-                                           appendToLog, runStrategyElement,
-                                           seBars, seLastTimestamp, st)
+                                           appendToLog, seBars, seLastTimestamp,
+                                           st)
 import           ATrade.RoboCom.Positions
 import           ATrade.RoboCom.Types     (BarSeries (..), Ticker (..),
                                            Timeframe (..))
@@ -196,28 +196,6 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
           handleEvent x
           handleEvents
         _ -> return ()
-
-    {-
-    executeActions actions = concat <$> mapM executeAction actions
-
-    executeAction (ActionOrder order) = do
-      oid <- nextOrderId
-      let submittedOrder = order { orderState = Submitted, orderId = oid }
-      modify' (\s -> s { pendingOrders = submittedOrder : pendingOrders s })
-      return [OrderSubmitted submittedOrder]
-
-    executeAction (ActionCancelOrder oid) = do
-      mbOrder <- find (\o -> orderId o == oid && orderState o == Submitted) <$> gets pendingOrders
-      case mbOrder of
-        Just _ -> do
-          modify' (\s -> s { pendingOrders = filter (\o -> orderId o == oid) (pendingOrders s)})
-          return [OrderUpdate oid Cancelled]
-        _ -> return []
-
-    executeAction (ActionLog t) = modify' (\s -> s { logs = t : logs s }) >> return []
-    executeAction (ActionSetupTimer t) = modify' (\s -> s { pendingTimers = t : pendingTimers s }) >> return []
-    executeAction (ActionIO _ _) = return []
-    -}
 
     executePendingOrders bar = do
       executeMarketOrders bar

@@ -47,7 +47,7 @@ import Data.Maybe
 import Data.Monoid
 import Database.Redis hiding (info, decode)
 import ATrade.Types
-import ATrade.RoboCom.Monad (StrategyMonad, StrategyAction(..), EventCallback, Event(..), runStrategyElement, StrategyEnvironment(..), seBars, seLastTimestamp, Event(..), MonadRobot(..))
+import ATrade.RoboCom.Monad (EventCallback, Event(..), StrategyEnvironment(..), seBars, seLastTimestamp, Event(..), MonadRobot(..))
 import ATrade.BarAggregator
 import ATrade.Driver.Real.BrokerClientThread
 import ATrade.Driver.Real.QuoteSourceThread
