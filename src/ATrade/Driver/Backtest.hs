@@ -277,7 +277,7 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
                                 }
 
     handleEvent event@(NewBar bar) = do
-      events <- executePendingOrders bar
+      executePendingOrders bar
       firedTimers <- fireTimers (barTimestamp bar)
       mapM_ (\x -> enqueueEvent (TimerFired x)) firedTimers
       handleEvent' event
