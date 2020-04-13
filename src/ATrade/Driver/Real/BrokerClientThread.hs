@@ -9,7 +9,6 @@ import           ATrade.Broker.Client
 import           ATrade.Broker.Protocol
 import           ATrade.RoboCom.Monad           hiding (cancelOrder,
                                                  submitOrder)
-import           ATrade.RoboCom.Types
 import           ATrade.Types
 
 import           Control.Concurrent             hiding (readChan, writeChan,

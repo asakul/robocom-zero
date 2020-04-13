@@ -19,9 +19,6 @@ import           Data.Aeson.Types
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict     as M
 import qualified Data.Text           as T
-import qualified Data.Text.Lazy      as TL
-import           Data.Time.Clock
-import           Text.Read           hiding (String)
 
 newtype Timeframe =
   Timeframe Integer deriving (Show, Eq)

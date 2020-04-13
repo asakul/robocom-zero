@@ -32,7 +32,6 @@ import           Control.Lens
 import           Control.Monad.State
 import qualified Data.Map.Strict      as M
 import           Data.Time.Clock
-import           Debug.Trace
 
 -- | Bar aggregator state
 data BarAggregator = BarAggregator {
@@ -110,7 +109,7 @@ handleTick tick = runState $ do
     else
       return Nothing
   where
-    isInTimeInterval tick (a, b) = (utctDayTime . timestamp) tick >= a && (utctDayTime . timestamp) tick <= b
+    isInTimeInterval tick' (a, b) = (utctDayTime . timestamp) tick' >= a && (utctDayTime . timestamp) tick' <= b
     barFromTick !newtick = Bar { barSecurity = security newtick,
       barTimestamp = timestamp newtick,
       barOpen = value newtick,
@@ -133,18 +132,6 @@ handleTick tick = runState $ do
     updateBarTimestamp !bar newtick = bar { barTimestamp = newTimestamp }
       where
         newTimestamp = timestamp newtick
-
-    emptyBarFrom !bar newtick = newBar
-      where
-        newTimestamp = timestamp newtick
-        newBar = Bar {
-          barSecurity = barSecurity bar,
-          barTimestamp = newTimestamp,
-          barOpen = barClose bar,
-          barHigh = barClose bar,
-          barLow = barClose bar,
-          barClose = barClose bar,
-          barVolume = 0 }
 
 updateTime :: Tick -> BarAggregator -> (Maybe Bar, BarAggregator)
 updateTime tick = runState $ do

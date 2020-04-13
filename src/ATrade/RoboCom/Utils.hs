@@ -15,12 +15,11 @@ module ATrade.RoboCom.Utils (
 
 import           ATrade.Types
 
-import qualified Data.Text              as T
-import           Data.Text.Lazy.Builder
+import qualified Data.Text          as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 
-import           Text.Read              hiding (String)
+import           Text.Read          hiding (String)
 
 rescaleToDaily :: [Bar] -> [Bar]
 rescaleToDaily (firstBar:restBars) = rescaleToDaily' restBars firstBar

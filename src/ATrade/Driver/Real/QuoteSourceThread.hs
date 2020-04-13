@@ -13,7 +13,6 @@ import           ATrade.RoboCom.Types
 import           ATrade.Types
 
 import           Data.IORef
-import           Data.Maybe
 import qualified Data.Text                      as T
 
 import           Control.Concurrent             hiding (readChan, writeChan,
@@ -58,7 +57,4 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
       (datatype tick /= LastTradePrice || (datatype tick == LastTradePrice && volume tick > 0))
 
     tickersList = fmap code . (tickers . strategyInstanceParams) $ strategy
-    applyTimeframeSpec t = case maybeSourceTimeframe of
-      Just tf -> t `T.append` T.pack (":" ++ show tf ++ ";")
-      Nothing -> t
 

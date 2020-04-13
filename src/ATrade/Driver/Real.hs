@@ -44,7 +44,6 @@ import Data.Time.Calendar
 import Data.Time.Clock
 import Data.Time.Clock.POSIX
 import Data.Maybe
-import Data.Monoid
 import Database.Redis hiding (info, decode)
 import ATrade.Types
 import ATrade.RoboCom.Monad (EventCallback, Event(..), StrategyEnvironment(..), seBars, seLastTimestamp, Event(..), MonadRobot(..))
@@ -141,10 +140,10 @@ instance MonadRobot (App c s) c s where
     timers <- asks envTimers
     lift $ atomicModifyIORef' timers (\s -> (t : s, ()))
 
-  enqueueIOAction actionId action = do
+  enqueueIOAction actionId action' = do
     eventChan <- asks envEventChan
     lift $ void $ forkIO $ do
-      v <- action
+      v <- action'
       BC.writeChan eventChan $ ActionCompleted actionId v
       
   getConfig = asks envConfigRef >>= lift . readIORef
@@ -282,7 +281,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
         envAggregator = agg,
         envLastTimestamp = now
         }
-    runReaderT (barStrategyDriver ctx (sourceBarTimeframe params) tickFilter strategy configRef stateRef timersRef shutdownMv) env `finally` killThread stateSavingThread)
+    runReaderT (barStrategyDriver ctx (sourceBarTimeframe params) tickFilter strategy shutdownMv) env `finally` killThread stateSavingThread)
   where
     tickFilter :: Tick -> Bool
     tickFilter tick =
@@ -476,8 +475,8 @@ mkBarStrategy instanceParams dd params initialState cb = BarStrategy {
 
 -- | Main function which handles incoming events (ticks/orders), passes them to strategy callback
 -- and executes returned strategy actions
-barStrategyDriver :: Context -> Maybe Int -> (Tick -> Bool) -> Strategy c s -> IORef c -> IORef s -> IORef [UTCTime] -> MVar () -> App c s ()
-barStrategyDriver ctx mbSourceTimeframe tickFilter strategy configRef stateRef timersRef shutdownVar = do
+barStrategyDriver :: Context -> Maybe Int -> (Tick -> Bool) -> Strategy c s -> MVar () -> App c s ()
+barStrategyDriver ctx mbSourceTimeframe tickFilter strategy shutdownVar = do
   eventChan <- asks envEventChan
   brokerChan <- asks envBrokerChan
   agg <- asks envAggregator
@@ -522,6 +521,7 @@ barStrategyDriver ctx mbSourceTimeframe tickFilter strategy configRef stateRef t
 
             newTimers <- catMaybes <$> (mapM (checkTimer eventChan newTimestamp) $ strategyTimers strategy')
             (eventCallback strategy) event
+            timersRef <- asks envTimers
             lift $ writeIORef timersRef newTimers
 
             readAndHandleEvents agg strategy' 

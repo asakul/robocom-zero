@@ -63,6 +63,7 @@ module ATrade.RoboCom.Positions
   exitAtLimit,
   doNothing,
   setStopLoss,
+  setLimitStopLoss,
   setTakeProfit,
   setStopLossAndTakeProfit
 ) where
@@ -75,7 +76,6 @@ import           ATrade.Types
 
 import           Control.Lens
 import           Control.Monad
-import           Ether
 
 import           Data.Aeson
 import qualified Data.List            as L
@@ -448,9 +448,9 @@ onActionCompletedEvent event f = case event of
   _                     -> doNothing
 
 enterAtMarket :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Operation -> m Position
-enterAtMarket signalName operation = do
+enterAtMarket operationSignalName operation = do
   env <- getEnvironment
-  enterAtMarketWithParams (env ^. seAccount) (env ^. seVolume) (SignalId (env ^. seInstanceId) signalName "") operation
+  enterAtMarketWithParams (env ^. seAccount) (env ^. seVolume) (SignalId (env ^. seInstanceId) operationSignalName "") operation
 
 enterAtMarketWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Int -> SignalId -> Operation -> m Position
 enterAtMarketWithParams account quantity signalId operation = do
@@ -468,15 +468,15 @@ enterAtMarketWithParams account quantity signalId operation = do
   }
 
 enterAtLimit :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Price -> Operation -> m Position
-enterAtLimit timeToCancel signalName price operation = do
+enterAtLimit timeToCancel operationSignalName price operation = do
   env <- getEnvironment
-  enterAtLimitWithParams timeToCancel (env ^. seAccount) (env ^. seVolume) (SignalId (env ^. seInstanceId) signalName "") price operation
+  enterAtLimitWithParams timeToCancel (env ^. seAccount) (env ^. seVolume) (SignalId (env ^. seInstanceId) operationSignalName "") price operation
 
 enterAtLimitWithVolume :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Price -> Int -> Operation -> m Position
-enterAtLimitWithVolume timeToCancel signalName price vol operation = do
+enterAtLimitWithVolume timeToCancel operationSignalName price vol operation = do
   acc <- view seAccount <$> getEnvironment
   inst <- view seInstanceId <$> getEnvironment
-  enterAtLimitWithParams timeToCancel acc vol (SignalId inst signalName "") price operation
+  enterAtLimitWithParams timeToCancel acc vol (SignalId inst operationSignalName "") price operation
 
 enterAtLimitWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitWithParams timeToCancel account quantity signalId price operation = do
@@ -484,17 +484,17 @@ enterAtLimitWithParams timeToCancel account quantity signalId price operation = 
   enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation
 
 enterAtLimitForTickerWithVolume :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Price -> Int -> Operation -> m Position
-enterAtLimitForTickerWithVolume tickerId timeToCancel signalName price vol operation = do
+enterAtLimitForTickerWithVolume tickerId timeToCancel operationSignalName price vol operation = do
   acc <- view seAccount <$> getEnvironment
   inst <- view seInstanceId <$> getEnvironment
-  enterAtLimitForTickerWithParams tickerId timeToCancel acc vol (SignalId inst signalName "") price operation
+  enterAtLimitForTickerWithParams tickerId timeToCancel acc vol (SignalId inst operationSignalName "") price operation
 
 enterAtLimitForTicker :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Price -> Operation -> m Position
-enterAtLimitForTicker tickerId timeToCancel signalName price operation = do
+enterAtLimitForTicker tickerId timeToCancel operationSignalName price operation = do
   acc <- view seAccount <$> getEnvironment
   inst <- view seInstanceId <$> getEnvironment
   vol <- view seVolume <$> getEnvironment
-  enterAtLimitForTickerWithParams tickerId timeToCancel acc vol (SignalId inst signalName "") price operation
+  enterAtLimitForTickerWithParams tickerId timeToCancel acc vol (SignalId inst operationSignalName "") price operation
 
 enterAtLimitForTickerWithParams :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation = do
@@ -514,25 +514,25 @@ enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId 
   }
 
 enterLongAtMarket :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> m Position
-enterLongAtMarket signalName = enterAtMarket signalName Buy
+enterLongAtMarket operationSignalName = enterAtMarket operationSignalName Buy
 
 enterShortAtMarket :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> m Position
-enterShortAtMarket signalName = enterAtMarket signalName Sell
+enterShortAtMarket operationSignalName = enterAtMarket operationSignalName Sell
 
 enterLongAtLimit :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> Price -> T.Text -> m Position
-enterLongAtLimit timeToCancel price signalName = enterAtLimit timeToCancel signalName price Buy
+enterLongAtLimit timeToCancel price operationSignalName = enterAtLimit timeToCancel operationSignalName price Buy
 
 enterLongAtLimitForTicker :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> Price -> T.Text -> m Position
-enterLongAtLimitForTicker tickerId timeToCancel price signalName = enterAtLimitForTicker tickerId timeToCancel signalName price Buy
+enterLongAtLimitForTicker tickerId timeToCancel price operationSignalName = enterAtLimitForTicker tickerId timeToCancel operationSignalName price Buy
 
 enterShortAtLimit :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> Price -> T.Text -> m Position
-enterShortAtLimit timeToCancel price signalName = enterAtLimit timeToCancel signalName price Sell
+enterShortAtLimit timeToCancel price operationSignalName = enterAtLimit timeToCancel operationSignalName price Sell
 
 enterShortAtLimitForTicker :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> Price -> T.Text -> m Position
-enterShortAtLimitForTicker tickerId timeToCancel price signalName = enterAtLimitForTicker tickerId timeToCancel signalName price Sell
+enterShortAtLimitForTicker tickerId timeToCancel price operationSignalName = enterAtLimitForTicker tickerId timeToCancel operationSignalName price Sell
 
 exitAtMarket :: (StateHasPositions s, MonadRobot m c s) => Position -> T.Text -> m Position
-exitAtMarket position signalName = do
+exitAtMarket position operationSignalName = do
   inst <- view seInstanceId <$> getEnvironment
   lastTs <- view seLastTimestamp <$> getEnvironment
   case posCurrentOrder position of
@@ -559,11 +559,11 @@ exitAtMarket position signalName = do
         orderQuantity = (abs . posBalance) position,
         orderPrice = Market,
         orderOperation = if posBalance position > 0 then Sell else Buy,
-        orderSignalId = (SignalId inst signalName "")
+        orderSignalId = (SignalId inst operationSignalName "")
       }
 
 exitAtLimit :: (StateHasPositions s, MonadRobot m c s) => NominalDiffTime -> Price -> Position -> T.Text -> m Position
-exitAtLimit timeToCancel price position signalName = do
+exitAtLimit timeToCancel price position operationSignalName = do
   lastTs <- view seLastTimestamp <$> getEnvironment
   inst <- view seInstanceId <$> getEnvironment
   case posCurrentOrder position of
@@ -584,7 +584,7 @@ exitAtLimit timeToCancel price position signalName = do
       orderQuantity = (abs . posBalance) position,
       orderPrice = Limit price,
       orderOperation = if posBalance position > 0 then Sell else Buy,
-      orderSignalId = SignalId inst signalName ""
+      orderSignalId = SignalId inst operationSignalName ""
     }
 
 doNothing :: (MonadRobot m c s) => m ()

@@ -9,7 +9,6 @@ module ATrade.Quotes.QHP (
 import           ATrade.Types
 import           Data.Aeson
 import           Data.Binary.Get
-import           Data.Binary.IEEE754
 import qualified Data.ByteString.Lazy  as BL
 import qualified Data.Text             as T
 import           Data.Time.Calendar

@@ -121,6 +121,6 @@ bbandUpper period devs values = sma period values + devs * sigma
     mean = sma period
 
 percentRank :: Int -> [Double] -> Double
-percentRank period values@(v:vs) = fromIntegral (length (filter (\x -> x < v) $ take period values)) / fromIntegral (length (take period values))
-percentRank period [] = 0
+percentRank period values@(v:_) = fromIntegral (length (filter (\x -> x < v) $ take period values)) / fromIntegral (length (take period values))
+percentRank _ [] = 0
 

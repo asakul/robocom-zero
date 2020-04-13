@@ -15,7 +15,7 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  ghc-options:         -Wall -fno-warn-orphans -Wno-type-defaults
+  ghc-options:         -Wall -Werror -fno-warn-orphans -Wno-type-defaults
   exposed-modules:     ATrade.RoboCom.Indicators
                      , ATrade.RoboCom.Monad
                      , ATrade.RoboCom.Positions

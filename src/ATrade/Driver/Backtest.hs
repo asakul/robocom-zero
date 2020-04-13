@@ -14,15 +14,13 @@ module ATrade.Driver.Backtest (
 ) where
 
 import           ATrade.Driver.Types      (InitializationCallback,
-                                           Strategy (..),
                                            StrategyInstanceParams (..))
 import           ATrade.Exceptions
 import           ATrade.Quotes.Finam      as QF
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
                                            MonadRobot (..),
                                            StrategyEnvironment (..),
-                                           appendToLog, seBars, seLastTimestamp,
-                                           st)
+                                           appendToLog, seBars, seLastTimestamp)
 import           ATrade.RoboCom.Positions
 import           ATrade.RoboCom.Types     (BarSeries (..), Ticker (..),
                                            Timeframe (..))
@@ -30,16 +28,15 @@ import           ATrade.Types
 import           Conduit                  (awaitForever, runConduit, yield,
                                            (.|))
 import           Control.Exception.Safe
-import           Control.Lens
+import           Control.Lens             hiding (ix)
 import           Control.Monad.ST         (runST)
 import           Control.Monad.State
-import           Data.Aeson               (FromJSON (..), Result (..),
-                                           Value (..), decode)
+import           Data.Aeson               (FromJSON (..), Value (..), decode)
 import           Data.Aeson.Types         (parseMaybe)
 import           Data.ByteString.Lazy     (readFile, toStrict)
 import           Data.Default
 import           Data.HashMap.Strict      (lookup)
-import           Data.List                (concat, filter, find, partition)
+import           Data.List                (partition)
 import           Data.List.Split          (splitOn)
 import qualified Data.Map.Strict          as M
 import           Data.Semigroup           ((<>))
@@ -95,7 +92,7 @@ feedArgParser = eitherReader (\s -> case splitOn ":" s of
   _            -> Left $ "Unable to parse feed id: " ++ s)
 
 backtestMain :: (FromJSON c, StateHasPositions s) => DiffTime -> s -> Maybe (InitializationCallback c) -> EventCallback c s -> IO ()
-backtestMain dataDownloadDelta defaultState initCallback callback = do
+backtestMain _dataDownloadDelta defaultState initCallback callback = do
   params <- execParser opts
   (tickerList, config) <- loadStrategyConfig params
 
@@ -116,7 +113,7 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
 
   feeds <- loadFeeds (paramsFeeds params)
 
-  runBacktestDriver feeds config tickerList
+  runBacktestDriver feeds updatedConfig tickerList
   where
     opts = info (helper <*> paramsParser)
       ( fullDesc <> header "ATrade strategy backtesting framework" )
@@ -141,13 +138,10 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
         Object o -> do
           mbTickers <- "tickers" `lookup` o
           mbParams <- "params" `lookup` o
-          tickers <- parseMaybe parseJSON mbTickers
+          tickers' <- parseMaybe parseJSON mbTickers
           params <- parseMaybe parseJSON mbParams
-          return (tickers, params)
+          return (tickers', params)
         _ -> Nothing
-
-    resultToMaybe (Error _)   = Nothing
-    resultToMaybe (Success a) = Just a
 
     barStreamFromFeeds feeds = case nextBar feeds of
       Just (bar, feeds') -> yield bar >> barStreamFromFeeds feeds'
@@ -166,7 +160,6 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
       minIx <- newSTRef Nothing
       forM_ [0..(V.length feeds-1)] (\ix -> do
         let feed = feeds ! ix
-        curIx <- readSTRef minIx
         curTs <- readSTRef minTs
         case feed of
           x:_ -> case curTs of
@@ -292,13 +285,14 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
 
     enqueueEvent event = pendingEvents %= ((:) event)
 
-instance (Default c, Default s) => Default (BacktestState s c)
+instance (Default c, Default s) => Default (BacktestState c s)
   where
     def = defaultBacktestState def def []
 
-defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers (UTCTime (fromGregorian 1970 1 1) 0)) [] [] [] 1 [] []
+defaultBacktestState :: s -> c -> [Ticker] -> BacktestState c s
+defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers' (UTCTime (fromGregorian 1970 1 1) 0)) [] [] [] 1 [] []
   where
-    tickers = M.fromList $ map (\x -> (code x, BarSeries (code x) (Timeframe (timeframeSeconds x)) [])) tickerList
+    tickers' = M.fromList $ map (\x -> (code x, BarSeries (code x) (Timeframe (timeframeSeconds x)) [])) tickerList
 
 newtype BacktestingMonad s c a = BacktestingMonad { unBacktestingMonad :: State (BacktestState s c) a }
   deriving (Functor, Applicative, Monad, MonadState (BacktestState s c))
@@ -324,7 +318,7 @@ instance MonadRobot (BacktestingMonad c s) c s where
         pendingOrders .= otherOrders
   appendToLog txt = logs %= ((:) txt)
   setupTimer time = pendingTimers %= ((:) time)
-  enqueueIOAction actionId action = error "Backtesting io actions is not supported"
+  enqueueIOAction _actionId _action = error "Backtesting io actions is not supported"
   getConfig = use robotParams
   getState = use robotState
   setState s = robotState .= s

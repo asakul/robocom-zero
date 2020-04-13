@@ -9,10 +9,8 @@ module ATrade.Quotes.HAP (
 import           ATrade.Types
 import           Data.Aeson
 import           Data.Binary.Get
-import           Data.Binary.IEEE754
 import qualified Data.ByteString.Lazy  as BL
 import qualified Data.Text             as T
-import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
 import           System.Log.Logger
@@ -68,10 +66,13 @@ getQuotes ctx params =
                           else return []
       _ -> return []
   where
-    resampleBars p bars@(firstBar:rest) = resampleBars' (periodToSec p) rest firstBar []
+    resampleBars p (firstBar:rest) = resampleBars' (periodToSec p) rest firstBar []
+    resampleBars _ [] = []
+
     resampleBars' p (bar:bars) currentBar resampled = if barNumber p currentBar == barNumber p bar
       then resampleBars' p bars (aggregate currentBar bar) resampled
       else resampleBars' p bars bar (currentBar : resampled)
+    resampleBars' _ [] _ _ = []
 
     periodToSec Period1Min  = 60
     periodToSec Period5Min  = 60 * 5
@@ -80,6 +81,7 @@ getQuotes ctx params =
     periodToSec PeriodHour  = 60 * 60
     periodToSec PeriodDay   = 60 * 60 * 24
     periodToSec PeriodWeek  = 86400 * 7
+    periodToSec PeriodMonth = 86400 * 7 * 4 -- TODO: incorrect, but what can I do?
 
     barNumber sec bar = truncate (utcTimeToPOSIXSeconds (barTimestamp bar)) `div` sec
 
