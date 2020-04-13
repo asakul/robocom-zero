@@ -7,6 +7,7 @@
 {-# LANGUAGE QuasiQuotes                #-}
 {-# LANGUAGE RankNTypes                 #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TemplateHaskell            #-}
 
 module ATrade.Driver.Backtest (
   backtestMain
@@ -36,6 +37,7 @@ import           Data.Aeson               (FromJSON (..), Result (..),
                                            Value (..), decode)
 import           Data.Aeson.Types         (parseMaybe)
 import           Data.ByteString.Lazy     (readFile, toStrict)
+import           Data.Default
 import           Data.HashMap.Strict      (lookup)
 import           Data.List                (concat, filter, find, partition)
 import           Data.List.Split          (splitOn)
@@ -60,6 +62,21 @@ data Params = Params {
   qtisEndpoint       :: Maybe String,
   paramsFeeds        :: [Feed]
 } deriving (Show, Eq)
+
+data BacktestState c s = BacktestState {
+  _cash                :: Double,
+  _robotState          :: s,
+  _robotParams         :: c,
+  _strategyEnvironment :: StrategyEnvironment,
+  _pendingOrders       :: [Order],
+  _pendingEvents       :: [Event],
+  _tradesLog           :: [Trade],
+  _orderIdCounter      :: Integer,
+  _pendingTimers       :: [UTCTime],
+  _logs                :: [T.Text]
+}
+
+makeLenses ''BacktestState
 
 paramsParser :: Parser Params
 paramsParser = Params
@@ -107,9 +124,9 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
     runBacktestDriver feeds params tickerList = do
       let s = runConduit $ barStreamFromFeeds feeds .| backtestLoop
       let finalState = execState (unBacktestingMonad s) $ defaultBacktestState defaultState params tickerList
-      print $ cash finalState
-      print $ tradesLog finalState
-      forM_ (reverse . logs $ finalState) putStrLn
+      print $ finalState ^. cash
+      print $ finalState ^. tradesLog
+      forM_ (reverse $ finalState ^. logs) putStrLn
 
     loadStrategyConfig :: (FromJSON c) => Params -> IO ([Ticker], c)
     loadStrategyConfig params = do
@@ -163,18 +180,24 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
       readSTRef minIx
 
     backtestLoop = awaitForever (\bar -> do
-      env <- gets strategyEnvironment
+      _curState <- use robotState
+      _env <- gets _strategyEnvironment
       let newTimestamp = barTimestamp bar
-      let newenv = env & seBars %~ (flip updateBars $ bar) & seLastTimestamp .~ newTimestamp
-      curState <- gets robotState
-      modify' (\s -> s { strategyEnvironment = newenv })
-      handleEvents [NewBar bar])
+      strategyEnvironment . seBars %= (flip updateBars bar)
+      strategyEnvironment . seLastTimestamp .= newTimestamp
+      enqueueEvent (NewBar bar)
+      lift handleEvents)
 
-    handleEvents events = do
-      newActions <- mapM handleEvent events
-      newEvents <- executeActions (concat newActions)
-      unless (null newEvents) $ handleEvents newEvents
+    handleEvents = do
+      events <- use pendingEvents
+      case events of
+        (x:xs) -> do
+          pendingEvents .= xs
+          handleEvent x
+          handleEvents
+        _ -> return ()
 
+    {-
     executeActions actions = concat <$> mapM executeAction actions
 
     executeAction (ActionOrder order) = do
@@ -194,21 +217,20 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
     executeAction (ActionLog t) = modify' (\s -> s { logs = t : logs s }) >> return []
     executeAction (ActionSetupTimer t) = modify' (\s -> s { pendingTimers = t : pendingTimers s }) >> return []
     executeAction (ActionIO _ _) = return []
+    -}
 
     executePendingOrders bar = do
-      ev1 <- executeMarketOrders bar
-      ev2 <- executeLimitOrders bar
-      return $ ev1 ++ ev2
+      executeMarketOrders bar
+      executeLimitOrders bar
 
     executeLimitOrders bar = do
-      (limitOrders, otherOrders) <- partition
+      (limitOrders, otherOrders'') <- partition
         (\o -> case orderPrice o of
           Limit _ -> True
-          _       -> False) <$> gets pendingOrders
-      let (executableOrders, otherOrders) = partition (isExecutable bar) limitOrders
-      modify' (\s -> s { pendingOrders = otherOrders } )
-      forM executableOrders $ \order ->
-        order `executeAtPrice` priceForLimitOrder order bar
+          _       -> False) <$> use pendingOrders
+      let (executableOrders, otherOrders') = partition (isExecutable bar) limitOrders
+      pendingOrders .= otherOrders' ++ otherOrders''
+      forM_ executableOrders $ \order -> order `executeAtPrice` priceForLimitOrder order bar
 
     isExecutable bar order = case orderPrice order of
       Limit price -> if orderOperation order == Buy
@@ -227,16 +249,19 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
       _ -> error "Should've been limit order"
 
     executeMarketOrders bar = do
-      (marketOrders, otherOrders) <- partition (\o -> orderPrice o == Market) <$> gets pendingOrders
-      modify' (\s -> s { pendingOrders = otherOrders })
-      forM marketOrders $ \order ->
+      (marketOrders, otherOrders) <- partition (\o -> orderPrice o == Market) <$> use pendingOrders
+      pendingOrders .= otherOrders
+      forM_ marketOrders $ \order ->
         order `executeAtPrice` barOpen bar
 
     executeAtPrice order price = do
-      ts <- view seLastTimestamp <$> gets strategyEnvironment
-      modify' (\s -> s { tradesLog = mkTrade order price ts : tradesLog s })
-      return $ OrderUpdate (orderId order) Executed
+      ts <- use $ strategyEnvironment . seLastTimestamp
+      let thisTrade = mkTrade order price ts
+      tradesLog %= (\log' -> thisTrade : log')
+      pendingEvents %= ((:) (OrderUpdate (orderId order) Executed))
+      pendingEvents %= ((:) (NewTrade thisTrade))
 
+    mkTrade :: Order -> Price -> UTCTime -> Trade
     mkTrade order price ts = Trade {
       tradeOrderId = orderId order,
       tradePrice = price,
@@ -254,19 +279,13 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
     handleEvent event@(NewBar bar) = do
       events <- executePendingOrders bar
       firedTimers <- fireTimers (barTimestamp bar)
-      actions <- concat <$> mapM handleEvent (events ++ map TimerFired firedTimers)
-      actions' <- handleEvent' event
-      return $ actions ++ actions'
+      mapM_ (\x -> enqueueEvent (TimerFired x)) firedTimers
+      handleEvent' event
+      return ()
 
     handleEvent event = handleEvent' event
 
-    handleEvent' event = do
-      env <- gets strategyEnvironment
-      params <- gets robotParams
-      curState <- gets robotState
-      let (newState, actions, _) = runStrategyElement params curState env $ callback event
-      modify' (\s -> s { robotState = newState } )
-      return actions
+    handleEvent' event = callback event
 
     updateBars barMap newbar = M.alter (\case
       Nothing -> Just BarSeries { bsTickerId = barSecurity newbar,
@@ -278,8 +297,8 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
     updateBarList newbar _      = newbar:[newbar]
 
     fireTimers ts = do
-      (firedTimers, otherTimers) <- partition (< ts) <$> gets pendingTimers
-      modify' (\s -> s { pendingTimers = otherTimers })
+      (firedTimers, otherTimers) <- partition (< ts) <$> use pendingTimers
+      pendingTimers .= otherTimers
       return firedTimers
 
     loadFeeds :: [Feed] -> IO (V.Vector [Bar])
@@ -292,39 +311,44 @@ backtestMain dataDownloadDelta defaultState initCallback callback = do
 
     rowToBar tid r = Bar tid (rowTime r) (rowOpen r) (rowHigh r) (rowLow r) (rowClose r) (rowVolume r)
 
-    nextOrderId = do
-      oid <- gets orderIdCounter
-      modify' (\s -> s { orderIdCounter = oid + 1 })
-      return oid
 
+    enqueueEvent event = pendingEvents %= ((:) event)
 
-data BacktestState s c = BacktestState {
-  cash                :: Double,
-  robotState          :: s,
-  robotParams         :: c,
-  strategyEnvironment :: StrategyEnvironment,
-  pendingOrders       :: [Order],
-  tradesLog           :: [Trade],
-  orderIdCounter      :: Integer,
-  pendingTimers       :: [UTCTime],
-  logs                :: [T.Text]
-}
+instance (Default c, Default s) => Default (BacktestState s c)
+  where
+    def = defaultBacktestState def def []
 
-defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers (UTCTime (fromGregorian 1970 1 1) 0)) [] [] 1 [] []
+defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers (UTCTime (fromGregorian 1970 1 1) 0)) [] [] [] 1 [] []
   where
     tickers = M.fromList $ map (\x -> (code x, BarSeries (code x) (Timeframe (timeframeSeconds x)) [])) tickerList
 
 newtype BacktestingMonad s c a = BacktestingMonad { unBacktestingMonad :: State (BacktestState s c) a }
   deriving (Functor, Applicative, Monad, MonadState (BacktestState s c))
 
-instance MonadRobot (BacktestingMonad s c) s c where
-  submitOrder order = undefined
-  cancelOrder oid = undefined
-  appendToLog txt = undefined
-  setupTimer time = undefined
-  enqueueIOAction actionId action = undefined
-  getConfig = undefined
-  getState = undefined
-  setState s = undefined
-  getEnvironment = undefined
+nextOrderId :: BacktestingMonad s c OrderId
+nextOrderId = do
+  orderIdCounter += 1
+  use orderIdCounter
+
+instance MonadRobot (BacktestingMonad c s) c s where
+  submitOrder order = do
+    oid <- nextOrderId
+    let orderWithId = order { orderId = oid }
+    pendingOrders %= ((:) orderWithId)
+    pendingEvents %= ((:) (OrderSubmitted orderWithId))
+  cancelOrder oid = do
+    orders <- use pendingOrders
+    let (matchingOrders, otherOrders) = partition (\o -> orderId o == oid) orders
+    case matchingOrders of
+      [] -> return ()
+      xs -> do
+        mapM_ (\o -> pendingEvents %= ((:) (OrderUpdate (orderId o) Cancelled))) xs
+        pendingOrders .= otherOrders
+  appendToLog txt = logs %= ((:) txt)
+  setupTimer time = pendingTimers %= ((:) time)
+  enqueueIOAction actionId action = error "Backtesting io actions is not supported"
+  getConfig = use robotParams
+  getState = use robotState
+  setState s = robotState .= s
+  getEnvironment = use strategyEnvironment
 
