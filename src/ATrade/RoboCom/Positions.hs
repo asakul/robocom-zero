@@ -146,7 +146,7 @@ modifyPositions f = do
 class ParamsHasMainTicker a where
   mainTicker :: a -> TickerId
 
--- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements inact.
+-- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements intact.
 findAndModify :: (a -> Bool) -> (a -> a) -> [a] -> [a]
 findAndModify p m (x:xs) = if p x
   then m x : xs
