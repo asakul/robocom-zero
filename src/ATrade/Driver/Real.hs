@@ -509,9 +509,6 @@ barStrategyDriver ctx mbSourceTimeframe tickFilter strategy shutdownVar = do
         event <- lift $ readChan eventChan
         if event /= Shutdown
           then do
-            case event of
-              NewTick _ -> return ()
-              _ -> lift $ debugM "Strategy" $ "event: " ++ show event
             env <- getEnvironment
             let newTimestamp = case event of
                   NewTick tick -> timestamp tick
