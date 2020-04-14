@@ -203,10 +203,15 @@ dispatchPosition event pos = case posState pos of
       lastTs <- view seLastTimestamp <$> getEnvironment
       case posCurrentOrder pos of
         Just order -> if orderDeadline (posExecutionDeadline pos) lastTs
-          then do -- TODO call TimeoutHandler
-            appendToLog $ [st|"In PositionWaitingOpen: execution timeout: %?/%?"|] (posExecutionDeadline pos) lastTs
-            cancelOrder $ orderId order
-            return $ pos { posState = PositionWaitingPendingCancellation, posNextState = Just PositionCancelled }
+          then
+            if posBalance pos == 0
+              then do
+                appendToLog $ [st|"In PositionWaitingOpen: execution timeout: %?/%?"|] (posExecutionDeadline pos) lastTs
+                cancelOrder $ orderId order
+                return $ pos { posState = PositionWaitingPendingCancellation, posNextState = Just PositionCancelled }
+              else do
+                appendToLog $ [st|Order executed (partially, %? / %?): %?|] (posBalance pos) (orderQuantity order) order
+                return pos { posState = PositionOpen, posCurrentOrder = Nothing, posExecutionDeadline = Nothing, posEntryTime = Just lastTs}
           else case event of
             OrderUpdate oid newstate ->
               if oid == orderId order
@@ -225,9 +230,7 @@ dispatchPosition event pos = case posState pos of
                   _ -> do
                     appendToLog $ [st|In PositionWaitingOpen: order state update: %?|] newstate
                     return pos
-                else do
-                  appendToLog $ [st|Invalid order id: %?/%?|] oid (orderId order)
-                  return pos
+                else return pos -- Update for another position's order
             NewTrade trade -> do
               appendToLog $ [st|Order new trade: %?/%?|] order trade
               return $ if tradeOrderId trade == orderId order
@@ -304,6 +307,7 @@ dispatchPosition event pos = case posState pos of
           case posCurrentOrder pos of
             Just order -> cancelOrder (orderId order)
             _          -> doNothing
+          appendToLog $ [st|Was unable to close position, remaining balance: %?|] (posBalance pos)
           return $ pos { posState = PositionOpen, posSubmissionDeadline = Nothing, posExecutionDeadline = Nothing } -- TODO call TimeoutHandler if present
         else case (event, posCurrentOrder pos) of
           (OrderUpdate oid newstate, Just order) ->
@@ -313,6 +317,11 @@ dispatchPosition event pos = case posState pos of
                 posBalance = 0,
                 posSubmissionDeadline = Nothing }
               else pos
+          (NewTrade trade, Just order) ->
+             return $ if (tradeOrderId trade == orderId order)
+               then pos { posBalance = if tradeOperation trade == Buy then posBalance pos + tradeQuantity trade else posBalance pos - tradeQuantity trade }
+               else pos
+
           _ -> return pos
 
     handlePositionClosed = return
