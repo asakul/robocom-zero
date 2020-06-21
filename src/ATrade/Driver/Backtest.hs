@@ -28,7 +28,7 @@ import           ATrade.Types
 import           Conduit                  (awaitForever, runConduit, yield,
                                            (.|))
 import           Control.Exception.Safe
-import           Control.Lens             hiding (ix)
+import           Control.Lens             hiding (ix, (<|), (|>))
 import           Control.Monad.ST         (runST)
 import           Control.Monad.State
 import           Data.Aeson               (FromJSON (..), Value (..), decode)
@@ -40,6 +40,8 @@ import           Data.List                (partition)
 import           Data.List.Split          (splitOn)
 import qualified Data.Map.Strict          as M
 import           Data.Semigroup           ((<>))
+import           Data.Sequence            (Seq (..), (<|), (|>))
+import qualified Data.Sequence            as Seq
 import           Data.STRef               (newSTRef, readSTRef, writeSTRef)
 import qualified Data.Text                as T
 import           Data.Text.IO             (putStrLn)
@@ -66,7 +68,7 @@ data BacktestState c s = BacktestState {
   _robotParams         :: c,
   _strategyEnvironment :: StrategyEnvironment,
   _pendingOrders       :: [Order],
-  _pendingEvents       :: [Event],
+  _pendingEvents       :: Seq Event,
   _tradesLog           :: [Trade],
   _orderIdCounter      :: Integer,
   _pendingTimers       :: [UTCTime],
@@ -184,7 +186,7 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
     handleEvents = do
       events <- use pendingEvents
       case events of
-        (x:xs) -> do
+        x :<| xs -> do
           pendingEvents .= xs
           handleEvent x
           handleEvents
@@ -229,8 +231,8 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
       ts <- use $ strategyEnvironment . seLastTimestamp
       let thisTrade = mkTrade order price ts
       tradesLog %= (\log' -> thisTrade : log')
-      pendingEvents %= ((:) (OrderUpdate (orderId order) Executed))
-      pendingEvents %= ((:) (NewTrade thisTrade))
+      pendingEvents %= (\s -> (OrderUpdate (orderId order) Executed) <| s)
+      pendingEvents %= (\s -> (NewTrade thisTrade) <| s)
 
     mkTrade :: Order -> Price -> UTCTime -> Trade
     mkTrade order price ts = Trade {
@@ -249,6 +251,7 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
 
     handleEvent event@(NewBar bar) = do
       executePendingOrders bar
+      handleEvents -- This should pass OrderUpdate events to the callback before NewBar events
       firedTimers <- fireTimers (barTimestamp bar)
       mapM_ (\x -> enqueueEvent (TimerFired x)) firedTimers
       handleEvent' event
@@ -283,14 +286,14 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
     rowToBar tid r = Bar tid (rowTime r) (rowOpen r) (rowHigh r) (rowLow r) (rowClose r) (rowVolume r)
 
 
-    enqueueEvent event = pendingEvents %= ((:) event)
+    enqueueEvent event = pendingEvents %= (\s -> s |> event)
 
 instance (Default c, Default s) => Default (BacktestState c s)
   where
     def = defaultBacktestState def def []
 
 defaultBacktestState :: s -> c -> [Ticker] -> BacktestState c s
-defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers' (UTCTime (fromGregorian 1970 1 1) 0)) [] [] [] 1 [] []
+defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers' (UTCTime (fromGregorian 1970 1 1) 0)) [] Seq.empty [] 1 [] []
   where
     tickers' = M.fromList $ map (\x -> (code x, BarSeries (code x) (Timeframe (timeframeSeconds x)) [])) tickerList
 
@@ -307,14 +310,14 @@ instance MonadRobot (BacktestingMonad c s) c s where
     oid <- nextOrderId
     let orderWithId = order { orderId = oid }
     pendingOrders %= ((:) orderWithId)
-    pendingEvents %= ((:) (OrderSubmitted orderWithId))
+    pendingEvents %= (\s -> s |> (OrderSubmitted orderWithId))
   cancelOrder oid = do
     orders <- use pendingOrders
     let (matchingOrders, otherOrders) = partition (\o -> orderId o == oid) orders
     case matchingOrders of
       [] -> return ()
       xs -> do
-        mapM_ (\o -> pendingEvents %= ((:) (OrderUpdate (orderId o) Cancelled))) xs
+        mapM_ (\o -> pendingEvents %= (\s -> s |> (OrderUpdate (orderId o) Cancelled))) xs
         pendingOrders .= otherOrders
   appendToLog txt = logs %= ((:) txt)
   setupTimer time = pendingTimers %= ((:) time)
