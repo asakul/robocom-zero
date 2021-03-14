@@ -266,7 +266,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
         | otherwise ->
             M.fromList <$> mapM (loadTickerFromQHP ctx ((strategyHistoryProvider . strategyInstanceParams) strategy) (downloadDelta strategy)) (tickers . strategyInstanceParams $ strategy)
 
-    agg <- newIORef $ mkAggregatorFromBars historyBars [(hmsToDiffTime 6 50 0, hmsToDiffTime 21 10 0)]
+    agg <- newIORef $ mkAggregatorFromBars historyBars [(hmsToDiffTime 3 50 0, hmsToDiffTime 21 10 0)]
     now <- getCurrentTime >>= newIORef
     let env = Env {
         envStrategyInstanceParams = instanceParams,
