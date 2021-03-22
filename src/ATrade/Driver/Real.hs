@@ -229,7 +229,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
 
   let strategy = mkBarStrategy instanceParams dataDownloadDelta updatedConfig stratState callback
   stateRef <- newIORef stratState
-  configRef <- newIORef config
+  configRef <- newIORef updatedConfig
   timersRef <- newIORef timersState
   shutdownMv <- newEmptyMVar
   installHandler sigINT (gracefulShutdown params stateRef timersRef shutdownMv)
