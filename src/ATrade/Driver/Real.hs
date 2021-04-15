@@ -288,7 +288,7 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
              | classCode == "SPBFUT" || classCode == "SPBOPT" -> any (inInterval . utctDayTime . timestamp $ tick) fortsIntervals
              | otherwise -> any (inInterval . utctDayTime . timestamp $ tick) secIntervals
 
-    fortsIntervals = [(fromHMS 7 0 0, fromHMS 11 0 0), (fromHMS 11 5 0, fromHMS 15 45 0), (fromHMS 16 0 0, fromHMS 20 50 0)]
+    fortsIntervals = [(fromHMS 4 0 0, fromHMS 11 0 0), (fromHMS 11 5 0, fromHMS 15 45 0), (fromHMS 16 0 0, fromHMS 20 50 0)]
     secIntervals = [(fromHMS 6 50 0, fromHMS 15 51 0)]
 
     fromHMS h m s = h * 3600 + m * 60 + s
