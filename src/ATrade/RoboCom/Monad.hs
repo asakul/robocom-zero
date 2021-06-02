@@ -19,7 +19,7 @@ module ATrade.RoboCom.Monad (
   Event(..),
   MonadRobot(..),
   also,
-  st
+  t
 ) where
 
 import           ATrade.RoboCom.Types
@@ -27,9 +27,9 @@ import           ATrade.Types
 
 import           Control.Lens
 import           Data.Aeson.Types
-import qualified Data.Text            as T
+import qualified Data.Text               as T
 import           Data.Time.Clock
-import           Text.Printf.TH
+import           Language.Haskell.Printf
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
   submitOrder :: Order -> m ()

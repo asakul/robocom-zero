@@ -15,9 +15,10 @@ cabal-version:       >=1.10
 
 library
   hs-source-dirs:      src
-  ghc-options:         -Wall -Werror -fno-warn-orphans -Wno-type-defaults
+  ghc-options:         -Wall -fno-warn-orphans -Wno-type-defaults
   exposed-modules:     ATrade.RoboCom.Indicators
                      , ATrade.RoboCom.Monad
+                     , ATrade.RoboCom.Persistence
                      , ATrade.RoboCom.Positions
                      , ATrade.RoboCom.Types
                      , ATrade.RoboCom.Utils
@@ -51,7 +52,6 @@ library
                      , binary-ieee754
                      , zeromq4-haskell
                      , unordered-containers
-                     , ether
                      , th-printf
                      , BoundedChan
                      , monad-loops

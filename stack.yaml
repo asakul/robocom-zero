@@ -18,7 +18,7 @@
 #
 # resolver: ./custom-snapshot.yaml
 # resolver: https://example.com/snapshots/2018-01-01.yaml
-resolver: lts-12.9
+resolver: lts-17.14
 
 # User packages to be built.
 # Various formats can be used as shown in the example below.
@@ -46,10 +46,8 @@ extra-deps:
 - list-extras-0.4.1.4
 - snowball-1.0.0.1
 - binary-ieee754-0.1.0.0
-- th-printf-0.5.1
+- th-printf-0.7
 - normaldistribution-1.1.0.3
-- text-format-0.3.2
-- ether-0.5.1.0
 
 # Override default flag values for local packages and extra-deps
 # flags: {}
