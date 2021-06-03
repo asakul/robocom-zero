@@ -1,16 +1,21 @@
 {-# LANGUAGE OverloadedStrings #-}
 
 module ATrade.Quotes.QHP (
-  getQuotes,
   Period(..),
-  RequestParams(..)
+  RequestParams(..),
+  QHPHandle,
+  mkQHPHandle,
+  requestHistoryFromQHP
   ) where
 
+import           ATrade.Exceptions
 import           ATrade.Types
+import           Control.Exception.Safe (MonadThrow, throw)
+import           Control.Monad.IO.Class (MonadIO, liftIO)
 import           Data.Aeson
 import           Data.Binary.Get
-import qualified Data.ByteString.Lazy  as BL
-import qualified Data.Text             as T
+import qualified Data.ByteString.Lazy   as BL
+import qualified Data.Text              as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
@@ -38,6 +43,39 @@ instance Show Period where
   show PeriodDay   = "D"
   show PeriodWeek  = "W"
   show PeriodMonth = "MN"
+
+data QHPHandle = QHPHandle
+  {
+      qhpContext  :: Context
+    , qhpEndpoint :: T.Text
+  }
+
+mkQHPHandle :: Context -> T.Text -> QHPHandle
+mkQHPHandle = QHPHandle
+
+requestHistoryFromQHP :: (MonadThrow m, MonadIO m) => QHPHandle -> TickerId -> BarTimeframe -> UTCTime -> UTCTime -> m [Bar]
+requestHistoryFromQHP qhp tickerId timeframe fromTime toTime =
+  case parseQHPPeriod (unBarTimeframe timeframe) of
+    Just tf -> liftIO $ getQuotes (qhpContext qhp) (params tf)
+    _       -> throw $ BadParams "QHP: Unable to parse timeframe"
+  where
+    params tf = RequestParams
+      {
+        endpoint = qhpEndpoint qhp,
+        ticker = tickerId,
+        startDate = utctDay fromTime,
+        endDate = utctDay toTime,
+        period = tf
+      }
+
+    parseQHPPeriod x
+      | x == 60 = Just Period1Min
+      | x == 5 * 60 = Just Period5Min
+      | x == 15 * 60 = Just Period15Min
+      | x == 30 * 60 = Just Period30Min
+      | x == 60 * 60 = Just PeriodHour
+      | x == 24 * 60 * 60 = Just PeriodDay
+      | otherwise = Nothing
 
 data RequestParams =
   RequestParams

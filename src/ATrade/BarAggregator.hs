@@ -22,7 +22,8 @@ module ATrade.BarAggregator (
   handleTick,
   updateTime,
   handleBar,
-  hmsToDiffTime
+  hmsToDiffTime,
+  replaceHistory
 ) where
 
 import           ATrade.RoboCom.Types
@@ -46,6 +47,9 @@ mkAggregatorFromBars myBars timeWindows = BarAggregator {
   bars = myBars,
   lastTicks = M.empty,
   tickTimeWindows = timeWindows }
+
+replaceHistory :: BarAggregator -> M.Map TickerId BarSeries -> BarAggregator
+replaceHistory agg bars' = agg { bars = bars' }
 
 lBars :: (M.Map TickerId BarSeries -> Identity (M.Map TickerId BarSeries)) -> BarAggregator -> Identity BarAggregator
 lBars = lens bars (\s b -> s { bars = b })

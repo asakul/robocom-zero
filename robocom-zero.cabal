@@ -18,10 +18,10 @@ library
   ghc-options:         -Wall -fno-warn-orphans -Wno-type-defaults
   exposed-modules:     ATrade.RoboCom.Indicators
                      , ATrade.RoboCom.Monad
-                     , ATrade.RoboCom.Persistence
                      , ATrade.RoboCom.Positions
                      , ATrade.RoboCom.Types
                      , ATrade.RoboCom.Utils
+                     , ATrade.Quotes
                      , ATrade.Quotes.Finam
                      , ATrade.Quotes.HAP
                      , ATrade.Quotes.QHP
