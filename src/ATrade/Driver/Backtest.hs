@@ -39,7 +39,6 @@ import           Data.HashMap.Strict      (lookup)
 import           Data.List                (partition)
 import           Data.List.Split          (splitOn)
 import qualified Data.Map.Strict          as M
-import           Data.Semigroup           ((<>))
 import           Data.Sequence            (Seq (..), (<|), (|>))
 import qualified Data.Sequence            as Seq
 import           Data.STRef               (newSTRef, readSTRef, writeSTRef)

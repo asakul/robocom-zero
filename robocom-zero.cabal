@@ -23,7 +23,6 @@ library
                      , ATrade.RoboCom.Utils
                      , ATrade.Quotes
                      , ATrade.Quotes.Finam
-                     , ATrade.Quotes.HAP
                      , ATrade.Quotes.QHP
                      , ATrade.Quotes.QTIS
                      , ATrade.Driver.Real

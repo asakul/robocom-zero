@@ -33,7 +33,6 @@ import Control.Exception.Safe
 import Control.Lens hiding (Context, (.=))
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Lazy as BL
-import qualified Data.List as L
 import qualified Data.Map as M
 import qualified Data.Text as T
 import Data.Text.Encoding
@@ -53,9 +52,7 @@ import ATrade.Driver.Real.QuoteSourceThread
 import ATrade.Driver.Types (Strategy(..), StrategyInstanceParams(..), InitializationCallback)
 import ATrade.RoboCom.Types (BarSeries(..), Ticker(..), Timeframe(..))
 import ATrade.Exceptions
-import ATrade.Quotes.Finam as QF
 import ATrade.Quotes.QHP as QQ
-import ATrade.Quotes.HAP as QH
 import System.ZMQ4 hiding (Event(..))
 import GHC.Generics
 
@@ -264,19 +261,6 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
 
   debugM "main" "Starting strategy driver"
   withContext (\ctx -> do
-    infoM "main" "Loading history"
-    -- Load tickers data and create BarAggregator from them
-{-
-    historyBars <-
-      if 
-        | (strategyHistoryProviderType . strategyInstanceParams) strategy == "finam" -> 
-            M.fromList <$> mapM (loadTickerFromFinam (downloadDelta strategy)) (tickers . strategyInstanceParams $ strategy)
-        | (strategyHistoryProviderType . strategyInstanceParams) strategy == "hap" ->
-            M.fromList <$> mapM (loadTickerFromHAP ctx ((strategyHistoryProvider . strategyInstanceParams) strategy) (downloadDelta strategy)) (tickers . strategyInstanceParams $ strategy)
-        | otherwise ->
-            M.fromList <$> mapM (loadTickerFromQHP ctx ((strategyHistoryProvider . strategyInstanceParams) strategy) (downloadDelta strategy)) (tickers . strategyInstanceParams $ strategy)
-
--}
     agg <- newIORef $ mkAggregatorFromBars M.empty [(hmsToDiffTime 3 50 0, hmsToDiffTime 21 10 0)]
     now <- getCurrentTime >>= newIORef
 
@@ -297,9 +281,9 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
     tickFilter :: Tick -> Bool
     tickFilter tick =
       let classCode = T.takeWhile (/= '#') (security tick) in
-          if
-             | classCode == "SPBFUT" || classCode == "SPBOPT" -> any (inInterval . utctDayTime . timestamp $ tick) fortsIntervals
-             | otherwise -> any (inInterval . utctDayTime . timestamp $ tick) secIntervals
+          if classCode == "SPBFUT" || classCode == "SPBOPT"
+            then any (inInterval . utctDayTime . timestamp $ tick) fortsIntervals
+            else any (inInterval . utctDayTime . timestamp $ tick) secIntervals
 
     fortsIntervals = [(fromHMS 4 0 0, fromHMS 11 0 0), (fromHMS 11 5 0, fromHMS 15 45 0), (fromHMS 16 0 0, fromHMS 20 50 0)]
     secIntervals = [(fromHMS 6 50 0, fromHMS 15 51 0)]
