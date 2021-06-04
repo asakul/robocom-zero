@@ -102,10 +102,6 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
     strategyAccount = "foo",
     strategyVolume = 1,
     tickers = tickerList,
-    strategyQuotesourceEp = "",
-    strategyBrokerEp = "",
-    strategyHistoryProviderType = "",
-    strategyHistoryProvider = "",
     strategyQTISEp = T.pack <$> qtisEndpoint params}
 
   updatedConfig <- case initCallback of

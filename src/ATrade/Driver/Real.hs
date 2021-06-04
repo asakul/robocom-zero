@@ -223,10 +223,6 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
     strategyAccount = T.pack . accountId $ params,
     strategyVolume = volumeFactor params,
     tickers = tickerList,
-    strategyQuotesourceEp = T.pack . quotesourceEp $ params,
-    strategyBrokerEp = T.pack . brokerEp $ params,
-    strategyHistoryProviderType = T.pack $ fromMaybe "finam" $ historyProviderType params,
-    strategyHistoryProvider = T.pack $ fromMaybe "" $ historyProvider params,
     strategyQTISEp = T.pack <$> qtisSocket params}
 
   updatedConfig <- case initCallback of
@@ -261,22 +257,30 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
 
   debugM "main" "Starting strategy driver"
   withContext (\ctx -> do
-    agg <- newIORef $ mkAggregatorFromBars M.empty [(hmsToDiffTime 3 50 0, hmsToDiffTime 21 10 0)]
-    now <- getCurrentTime >>= newIORef
 
-    let env = Env {
-        envHistorySource = mkQHPHandle ctx (strategyHistoryProvider . strategyInstanceParams $ strategy),
-        envStrategyInstanceParams = instanceParams,
-        envStrategyEnvironment = straEnv,
-        envConfigRef = configRef,
-        envStateRef = stateRef,
-        envBrokerChan = brokerChan,
-        envTimers = timersRef,
-        envEventChan = eventChan,
-        envAggregator = agg,
-        envLastTimestamp = now
-        }
-    runReaderT (barStrategyDriver ctx (sourceBarTimeframe params) tickFilter strategy shutdownMv) env `finally` killThread stateSavingThread)
+    let qsEp = T.pack $ quotesourceEp params
+    let brEp =  T.pack $ brokerEp params
+    agg <- newIORef $ mkAggregatorFromBars M.empty [(hmsToDiffTime 3 50 0, hmsToDiffTime 21 10 0)]
+    bracket (startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter (sourceBarTimeframe params)) killThread $ \_ -> do
+      debugM "Strategy" "QuoteSource thread forked"
+      bracket (startBrokerClientThread (strategyInstanceId . strategyInstanceParams $ strategy) ctx brEp brokerChan eventChan shutdownMv) killThread $ \_ -> do
+        debugM "Strategy" "Broker thread forked"
+
+        now <- getCurrentTime >>= newIORef
+
+        let env = Env {
+            envHistorySource = mkQHPHandle ctx (T.pack . fromMaybe "" . historyProvider $ params),
+            envStrategyInstanceParams = instanceParams,
+            envStrategyEnvironment = straEnv,
+            envConfigRef = configRef,
+            envStateRef = stateRef,
+            envBrokerChan = brokerChan,
+            envTimers = timersRef,
+            envEventChan = eventChan,
+            envAggregator = agg,
+            envLastTimestamp = now
+            }
+        runReaderT (barStrategyDriver strategy shutdownMv) env `finally` killThread stateSavingThread)
   where
     tickFilter :: Tick -> Bool
     tickFilter tick =
@@ -378,8 +382,8 @@ mkBarStrategy instanceParams dd params initialState cb = BarStrategy {
 
 -- | Main function which handles incoming events (ticks/orders), passes them to strategy callback
 -- and executes returned strategy actions
-barStrategyDriver :: (MonadHistory (App hs c s)) => Context -> Maybe Int -> (Tick -> Bool) -> Strategy c s -> MVar () -> App hs c s ()
-barStrategyDriver ctx mbSourceTimeframe tickFilter strategy shutdownVar = do
+barStrategyDriver :: (MonadHistory (App hs c s)) => Strategy c s -> MVar () -> App hs c s ()
+barStrategyDriver strategy shutdownVar = do
   now <- liftIO getCurrentTime
   history <- M.fromList <$> mapM (loadTickerHistory now) (tickers . strategyInstanceParams $ strategy)
   eventChan <- asks envEventChan
@@ -387,29 +391,20 @@ barStrategyDriver ctx mbSourceTimeframe tickFilter strategy shutdownVar = do
   agg <- asks envAggregator
   liftIO $ atomicModifyIORef' agg (\s -> (replaceHistory s history, ()))
 
-  bracket (lift $ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter mbSourceTimeframe) (lift . killThread) (\_ -> do
-    lift $ debugM "Strategy" "QuoteSource thread forked"
-    bracket (lift $ startBrokerClientThread (strategyInstanceId . strategyInstanceParams $ strategy) ctx brEp brokerChan eventChan shutdownVar) (lift . killThread) (\_ -> do
-      lift $ debugM "Strategy" "Broker thread forked"
+  wakeupTid <- lift . forkIO $ forever $ do
+    maybeShutdown <- tryTakeMVar shutdownVar
+    if isJust maybeShutdown
+      then writeChan eventChan Shutdown
+      else do
+        threadDelay 1000000
+        writeChan brokerChan BrokerRequestNotifications
+  lift $ debugM "Strategy" "Wakeup thread forked"
 
-      wakeupTid <- lift . forkIO $ forever $ do
-        maybeShutdown <- tryTakeMVar shutdownVar
-        if isJust maybeShutdown
-          then writeChan eventChan Shutdown
-          else do
-            threadDelay 1000000
-            writeChan brokerChan BrokerRequestNotifications
-      lift $ debugM "Strategy" "Wakeup thread forked"
-
-      readAndHandleEvents agg strategy
-      lift $ debugM "Strategy" "Stopping strategy driver"
-      lift $ killThread wakeupTid))
-
-  lift $ debugM "Strategy" "Strategy done"
+  readAndHandleEvents agg strategy
+  lift $ debugM "Strategy" "Stopping strategy driver"
+  lift $ killThread wakeupTid
 
   where
-    qsEp = strategyQuotesourceEp . strategyInstanceParams $ strategy
-    brEp = strategyBrokerEp . strategyInstanceParams $ strategy
 
     loadTickerHistory now t = do
       history <- getHistory (code t) (BarTimeframe (fromInteger . timeframeSeconds $ t))

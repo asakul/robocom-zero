@@ -26,15 +26,11 @@ data Strategy c s = BarStrategy {
 
 -- | Strategy instance params store few params which are common for all strategies
 data StrategyInstanceParams = StrategyInstanceParams {
-  strategyInstanceId          :: T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
-  strategyAccount             :: T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
-  strategyVolume              :: Int, -- ^ Volume to use for this instance (in lots/contracts)
-  tickers                     :: [Ticker], -- ^ List of tickers which is used by this strategy
-  strategyQuotesourceEp       :: T.Text, -- ^ QuoteSource server endpoint
-  strategyBrokerEp            :: T.Text, -- ^ Broker server endpoint
-  strategyHistoryProviderType :: T.Text,
-  strategyHistoryProvider     :: T.Text,
-  strategyQTISEp              :: Maybe T.Text
+  strategyInstanceId :: T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
+  strategyAccount    :: T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
+  strategyVolume     :: Int, -- ^ Volume to use for this instance (in lots/contracts)
+  tickers            :: [Ticker], -- ^ List of tickers which is used by this strategy
+  strategyQTISEp     :: Maybe T.Text
 }
 
 type InitializationCallback c = c -> StrategyInstanceParams -> IO c
