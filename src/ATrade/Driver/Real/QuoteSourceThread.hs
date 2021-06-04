@@ -24,8 +24,8 @@ import           Control.Monad
 import           System.Log.Logger
 import           System.ZMQ4                    hiding (Event)
 
-startQuoteSourceThread :: Context -> T.Text -> Strategy c s -> BoundedChan Event -> IORef BarAggregator -> (Tick -> Bool) -> Maybe Int -> IO ThreadId
-startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTimeframe = forkIO $ do
+startQuoteSourceThread :: Context -> T.Text -> StrategyInstanceParams -> BoundedChan Event -> IORef BarAggregator -> (Tick -> Bool) -> Maybe Int -> IO ThreadId
+startQuoteSourceThread ctx qsEp instanceParams eventChan agg tickFilter maybeSourceTimeframe = forkIO $ do
   tickChan <- newBoundedChan 1000
   bracket (startQuoteSourceClient tickChan tickersList ctx qsEp defaultClientSecurityParams)
     (\qs -> do
@@ -56,5 +56,5 @@ startQuoteSourceThread ctx qsEp strategy eventChan agg tickFilter maybeSourceTim
     goodTick tick = tickFilter tick &&
       (datatype tick /= LastTradePrice || (datatype tick == LastTradePrice && volume tick > 0))
 
-    tickersList = fmap code . (tickers . strategyInstanceParams) $ strategy
+    tickersList = fmap code . tickers $ instanceParams
 

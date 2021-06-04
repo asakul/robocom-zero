@@ -2,7 +2,6 @@
 
 module ATrade.Driver.Types
 (
-  Strategy(..),
   StrategyInstanceParams(..),
   InitializationCallback
 ) where
@@ -12,17 +11,6 @@ import           ATrade.RoboCom.Types
 
 import qualified Data.Text            as T
 import           Data.Time.Clock
-
--- | Top-level strategy configuration and state
-data Strategy c s = BarStrategy {
-  downloadDelta          :: DiffTime, -- ^ How much history to download at strategy start
-  eventCallback          :: EventCallback c s, -- ^ Strategy event callback
-  currentState           :: s, -- ^ Current strategy state. Updated after each 'EventCallback' call
-  strategyParams         :: c, -- ^ Strategy params
-  strategyTimers         :: [UTCTime],
-
-  strategyInstanceParams :: StrategyInstanceParams -- ^ Instance params
-}
 
 -- | Strategy instance params store few params which are common for all strategies
 data StrategyInstanceParams = StrategyInstanceParams {
