@@ -44,6 +44,7 @@ import qualified Data.Sequence            as Seq
 import           Data.STRef               (newSTRef, readSTRef, writeSTRef)
 import qualified Data.Text                as T
 import           Data.Text.IO             (putStrLn)
+import qualified Data.Text.Lazy           as TL
 import           Data.Time.Calendar       (fromGregorian)
 import           Data.Time.Clock          (DiffTime, UTCTime (..))
 import           Data.Vector              ((!), (!?), (//))
@@ -314,7 +315,7 @@ instance MonadRobot (BacktestingMonad c s) c s where
       xs -> do
         mapM_ (\o -> pendingEvents %= (\s -> s |> (OrderUpdate (orderId o) Cancelled))) xs
         pendingOrders .= otherOrders
-  appendToLog txt = logs %= ((:) txt)
+  appendToLog txt = logs %= ((:) (TL.toStrict txt))
   setupTimer time = pendingTimers %= ((:) time)
   enqueueIOAction _actionId _action = error "Backtesting io actions is not supported"
   getConfig = use robotParams

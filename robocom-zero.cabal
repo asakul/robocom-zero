@@ -66,6 +66,7 @@ library
                      , hedis
                      , gitrev
                      , data-default
+                     , template-haskell
 
   default-language:    Haskell2010
   other-modules:       ATrade.Exceptions

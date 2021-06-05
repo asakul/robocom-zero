@@ -47,6 +47,7 @@ import qualified Data.Map                              as M
 import           Data.Maybe
 import qualified Data.Text                             as T
 import           Data.Text.Encoding
+import qualified Data.Text.Lazy                        as TL
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
@@ -59,7 +60,6 @@ import           System.Log.Formatter
 import           System.Log.Handler                    (setFormatter)
 import           System.Log.Handler.Simple
 import           System.Log.Logger
-import           System.Random
 import           System.Signal
 import           System.ZMQ4                           hiding (Event (..))
 
@@ -141,7 +141,7 @@ instance MonadRobot (App historySource c s) c s where
     bc <- asks envBrokerChan
     lift $ BC.writeChan bc $ BrokerCancelOrder oId
 
-  appendToLog = lift . debugM "Strategy" . T.unpack
+  appendToLog = lift . debugM "Strategy" . T.unpack . TL.toStrict
   setupTimer t = do
     timers <- asks envTimers
     lift $ atomicModifyIORef' timers (\s -> (t : s, ()))

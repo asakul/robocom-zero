@@ -6,11 +6,9 @@ module ATrade.Driver.Types
   InitializationCallback
 ) where
 
-import           ATrade.RoboCom.Monad
 import           ATrade.RoboCom.Types
 
 import qualified Data.Text            as T
-import           Data.Time.Clock
 
 -- | Strategy instance params store few params which are common for all strategies
 data StrategyInstanceParams = StrategyInstanceParams {

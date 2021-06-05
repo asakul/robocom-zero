@@ -207,49 +207,49 @@ dispatchPosition event pos = case posState pos of
           then
             if posBalance pos == 0
               then do
-                appendToLog $ TL.toStrict $ [t|"In PositionWaitingOpen: execution timeout: %?/%?"|] (posExecutionDeadline pos) lastTs
+                appendToLog $ [t|"In PositionWaitingOpen: execution timeout: %?/%?"|] (posExecutionDeadline pos) lastTs
                 cancelOrder $ orderId order
                 return $ pos { posState = PositionWaitingPendingCancellation, posNextState = Just PositionCancelled }
               else do
-                appendToLog $ TL.toStrict $ [t|Order executed (partially, %? / %?): %?|] (posBalance pos) (orderQuantity order) order
+                appendToLog $ [t|Order executed (partially, %? / %?): %?|] (posBalance pos) (orderQuantity order) order
                 return pos { posState = PositionOpen, posCurrentOrder = Nothing, posExecutionDeadline = Nothing, posEntryTime = Just lastTs}
           else case event of
             OrderUpdate oid newstate ->
               if oid == orderId order
                 then case newstate of
                   Cancelled -> do
-                    appendToLog $ TL.toStrict $ [t|Order cancelled in PositionWaitingOpen: balance %d, max %d|] (posBalance pos) (orderQuantity order)
+                    appendToLog $ [t|Order cancelled in PositionWaitingOpen: balance %d, max %d|] (posBalance pos) (orderQuantity order)
                     if posBalance pos /= 0
                       then return pos { posState = PositionOpen, posCurrentOrder = Nothing, posExecutionDeadline = Nothing, posEntryTime = Just lastTs}
                       else return pos { posState = PositionCancelled }
                   Executed -> do
-                    appendToLog $ TL.toStrict $ [t|Order executed: %?|] order
+                    appendToLog $ [t|Order executed: %?|] order
                     return pos { posState = PositionOpen, posCurrentOrder = Nothing, posExecutionDeadline = Nothing, posBalance = balanceForOrder order, posEntryTime = Just lastTs}
                   Rejected -> do
-                    appendToLog $ TL.toStrict $ [t|Order rejected: %?|] order
+                    appendToLog $ [t|Order rejected: %?|] order
                     return pos { posState = PositionCancelled, posCurrentOrder = Nothing, posExecutionDeadline = Nothing, posBalance = 0, posEntryTime = Nothing }
                   _ -> do
-                    appendToLog $ TL.toStrict $ [t|In PositionWaitingOpen: order state update: %?|] newstate
+                    appendToLog $ [t|In PositionWaitingOpen: order state update: %?|] newstate
                     return pos
                 else return pos -- Update for another position's order
             NewTrade trade -> do
-              appendToLog $ TL.toStrict $ [t|Order new trade: %?/%?|] order trade
+              appendToLog $ [t|Order new trade: %?/%?|] order trade
               return $ if tradeOrderId trade == orderId order
                 then pos { posBalance = if tradeOperation trade == Buy then posBalance pos + tradeQuantity trade else posBalance pos - tradeQuantity trade }
                 else pos
             _ -> return pos
         Nothing -> do
-          appendToLog $ TL.toStrict $ [t|W: No current order in PositionWaitingOpen state: %?|] pos
+          appendToLog $ [t|W: No current order in PositionWaitingOpen state: %?|] pos
           return pos
 
     handlePositionOpen = do
       lastTs <- view seLastTimestamp <$> getEnvironment
       if
         | orderDeadline (posSubmissionDeadline pos) lastTs -> do
-            appendToLog $ TL.toStrict $ [t|PositionId: %? : Missed submission deadline: %?, remaining in PositionOpen state|] (posId pos) (posSubmissionDeadline pos)
+            appendToLog $ [t|PositionId: %? : Missed submission deadline: %?, remaining in PositionOpen state|] (posId pos) (posSubmissionDeadline pos)
             return pos { posSubmissionDeadline = Nothing, posExecutionDeadline = Nothing }
         | orderDeadline (posExecutionDeadline pos) lastTs -> do
-            appendToLog $ TL.toStrict $ [t|PositionId: %? : Missed execution deadline: %?, remaining in PositionOpen state|] (posId pos) (posExecutionDeadline pos)
+            appendToLog $ [t|PositionId: %? : Missed execution deadline: %?, remaining in PositionOpen state|] (posId pos) (posExecutionDeadline pos)
             return pos { posExecutionDeadline = Nothing }
         | otherwise ->  case event of
           NewTick tick -> if
@@ -308,7 +308,7 @@ dispatchPosition event pos = case posState pos of
           case posCurrentOrder pos of
             Just order -> cancelOrder (orderId order)
             _          -> doNothing
-          appendToLog $ TL.toStrict $ [t|Was unable to close position, remaining balance: %?|] (posBalance pos)
+          appendToLog $ [t|Was unable to close position, remaining balance: %?|] (posBalance pos)
           return $ pos { posState = PositionOpen, posSubmissionDeadline = Nothing, posExecutionDeadline = Nothing } -- TODO call TimeoutHandler if present
         else case (event, posCurrentOrder pos) of
           (OrderUpdate oid newstate, Just order) ->
@@ -365,7 +365,7 @@ newPosition order account tickerId operation quantity submissionDeadline = do
   }
   modifyPositions (\p -> position : p)
   positions <- getPositions <$> getState
-  appendToLog $ TL.toStrict $ [t|All positions: %?|] positions
+  appendToLog $ [t|All positions: %?|] positions
   return position
 
 reapDeadPositions :: (StateHasPositions s) => EventCallback c s
@@ -510,7 +510,7 @@ enterAtLimitForTickerWithParams :: (StateHasPositions s, MonadRobot m c s) => Ti
 enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation = do
   lastTs <- view seLastTimestamp <$> getEnvironment
   submitOrder order
-  appendToLog $ TL.toStrict $ [t|enterAtLimit: %?, deadline: %?|] tickerId (timeToCancel `addUTCTime` lastTs)
+  appendToLog $ [t|enterAtLimit: %?, deadline: %?|] tickerId (timeToCancel `addUTCTime` lastTs)
   newPosition order account tickerId operation quantity 20 >>=
     modifyPosition (\p -> p { posExecutionDeadline = Just $ timeToCancel `addUTCTime` lastTs })
   where
@@ -580,7 +580,7 @@ exitAtLimit timeToCancel price position operationSignalName = do
     Just order -> cancelOrder (orderId order)
     Nothing    -> doNothing
   submitOrder (closeOrder inst)
-  appendToLog $ TL.toStrict $ [t|exitAtLimit: %?, deadline: %?|] (posTicker position) (timeToCancel `addUTCTime` lastTs)
+  appendToLog $ [t|exitAtLimit: %?, deadline: %?|] (posTicker position) (timeToCancel `addUTCTime` lastTs)
   modifyPosition (\pos ->
     pos { posCurrentOrder = Nothing,
       posState = PositionWaitingCloseSubmission (closeOrder inst),

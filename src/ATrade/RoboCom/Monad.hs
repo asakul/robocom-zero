@@ -19,7 +19,8 @@ module ATrade.RoboCom.Monad (
   Event(..),
   MonadRobot(..),
   also,
-  t
+  t,
+  st
 ) where
 
 import           ATrade.RoboCom.Types
@@ -27,14 +28,16 @@ import           ATrade.Types
 
 import           Control.Lens
 import           Data.Aeson.Types
-import qualified Data.Text               as T
+import qualified Data.Text                 as T
+import qualified Data.Text.Lazy            as TL
 import           Data.Time.Clock
 import           Language.Haskell.Printf
+import           Language.Haskell.TH.Quote (QuasiQuoter)
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
   submitOrder :: Order -> m ()
   cancelOrder :: OrderId -> m ()
-  appendToLog :: T.Text -> m ()
+  appendToLog :: TL.Text -> m ()
   setupTimer :: UTCTime -> m ()
   enqueueIOAction :: Int -> IO Value -> m ()
   getConfig :: m c
@@ -45,6 +48,9 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
     oldState <- getState
     setState (f oldState)
   getEnvironment :: m StrategyEnvironment
+
+st :: QuasiQuoter
+st = t
 
 type EventCallback c s = forall m . MonadRobot m c s => Event -> m ()
 
