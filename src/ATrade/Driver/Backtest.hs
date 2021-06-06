@@ -16,14 +16,16 @@ module ATrade.Driver.Backtest (
 import           ATrade.Driver.Types      (InitializationCallback,
                                            StrategyInstanceParams (..))
 import           ATrade.Exceptions
+import           ATrade.Quotes
 import           ATrade.Quotes.Finam      as QF
+import           ATrade.Quotes.QTIS
 import           ATrade.RoboCom.Monad     (Event (..), EventCallback,
                                            MonadRobot (..),
                                            StrategyEnvironment (..),
                                            appendToLog, seBars, seLastTimestamp)
 import           ATrade.RoboCom.Positions
-import           ATrade.RoboCom.Types     (BarSeries (..), Ticker (..),
-                                           Timeframe (..))
+import           ATrade.RoboCom.Types     (BarSeries (..), Bars, InstrumentParameters (InstrumentParameters),
+                                           Ticker (..), Timeframe (..))
 import           ATrade.Types
 import           Conduit                  (awaitForever, runConduit, yield,
                                            (.|))
@@ -52,13 +54,14 @@ import qualified Data.Vector              as V
 import           Options.Applicative      hiding (Success)
 import           Prelude                  hiding (lookup, putStrLn, readFile)
 import           Safe                     (headMay)
+import           System.ZMQ4              hiding (Event)
 
 data Feed = Feed TickerId FilePath
   deriving (Show, Eq)
 
 data Params = Params {
   strategyConfigFile :: FilePath,
-  qtisEndpoint       :: Maybe String,
+  qtisEndpoint       :: String,
   paramsFeeds        :: [Feed]
 } deriving (Show, Eq)
 
@@ -82,8 +85,8 @@ paramsParser = Params
   <$> strOption (
       long "config" <> short 'c'
     )
-  <*> optional ( strOption
-    ( long "qtis" <> short 'q' <> metavar "ENDPOINT/ID" ))
+  <*> strOption
+    ( long "qtis" <> short 'q' <> metavar "ENDPOINT/ID" )
   <*> some (option feedArgParser (
       long "feed" <> short 'f'
     ))
@@ -103,7 +106,7 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
     strategyAccount = "foo",
     strategyVolume = 1,
     tickers = tickerList,
-    strategyQTISEp = T.pack <$> qtisEndpoint params}
+    strategyQTISEp = Nothing }
 
   updatedConfig <- case initCallback of
     Just cb -> cb config instanceParams
@@ -111,10 +114,23 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
 
   feeds <- loadFeeds (paramsFeeds params)
 
-  runBacktestDriver feeds updatedConfig tickerList
+  bars <- makeBars (T.pack $ qtisEndpoint params) tickerList
+
+  runBacktestDriver feeds updatedConfig bars
   where
     opts = info (helper <*> paramsParser)
       ( fullDesc <> header "ATrade strategy backtesting framework" )
+
+    makeBars :: T.Text -> [Ticker] -> IO (M.Map TickerId BarSeries)
+    makeBars qtisEp tickersList =
+      withContext $ \ctx ->
+        M.fromList <$> mapM (mkBarEntry ctx qtisEp) tickersList
+
+    mkBarEntry ctx qtisEp tickerEntry = do
+      info <- qtisGetTickersInfo ctx qtisEp (code tickerEntry)
+      return (code tickerEntry, BarSeries (code tickerEntry) (Timeframe (timeframeSeconds tickerEntry)) [] (InstrumentParameters (fromInteger $ tiLotSize info) (tiTickSize info)))
+
+
 
     runBacktestDriver feeds params tickerList = do
       let s = runConduit $ barStreamFromFeeds feeds .| backtestLoop
@@ -286,12 +302,10 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
 
 instance (Default c, Default s) => Default (BacktestState c s)
   where
-    def = defaultBacktestState def def []
+    def = defaultBacktestState def def def
 
-defaultBacktestState :: s -> c -> [Ticker] -> BacktestState c s
-defaultBacktestState s c tickerList = BacktestState 0 s c (StrategyEnvironment "" "" 1 tickers' (UTCTime (fromGregorian 1970 1 1) 0)) [] Seq.empty [] 1 [] []
-  where
-    tickers' = M.fromList $ map (\x -> (code x, BarSeries (code x) (Timeframe (timeframeSeconds x)) [])) tickerList
+defaultBacktestState :: s -> c -> Bars -> BacktestState c s
+defaultBacktestState s c bars = BacktestState 0 s c (StrategyEnvironment "" "" 1 bars (UTCTime (fromGregorian 1970 1 1) 0)) [] Seq.empty [] 1 [] []
 
 newtype BacktestingMonad s c a = BacktestingMonad { unBacktestingMonad :: State (BacktestState s c) a }
   deriving (Functor, Applicative, Monad, MonadState (BacktestState s c))

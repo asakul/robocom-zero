@@ -3,17 +3,16 @@
 module ATrade.Quotes.QTIS
 (
   TickerInfo(..),
-  qtisGetTickersInfo,
-  qtisGetTickersInfo'
+  qtisGetTickersInfo
 ) where
 
+import           ATrade.Exceptions
 import           ATrade.Types
-import           Control.Monad
+import           Control.Exception.Safe
 import           Data.Aeson
-import qualified Data.ByteString.Char8 as BC8
-import qualified Data.ByteString.Lazy  as BL
-import           Data.Maybe
-import qualified Data.Text             as T
+import qualified Data.ByteString.Char8  as BC8
+import qualified Data.ByteString.Lazy   as BL
+import qualified Data.Text              as T
 import           System.Log.Logger
 import           System.ZMQ4
 
@@ -35,23 +34,21 @@ instance ToJSON TickerInfo where
     "lot_size" .= tiLotSize ti,
     "tick_size" .= tiTickSize ti ]
 
-qtisGetTickersInfo' :: T.Text -> [TickerId] -> IO [TickerInfo]
-qtisGetTickersInfo' endpoint tickers = withContext (\ctx -> qtisGetTickersInfo ctx endpoint tickers)
-
-qtisGetTickersInfo :: Context -> T.Text -> [TickerId] -> IO [TickerInfo]
-qtisGetTickersInfo ctx endpoint tickers =
-  withSocket ctx Req (\sock -> do
+qtisGetTickersInfo :: Context -> T.Text -> TickerId -> IO TickerInfo
+qtisGetTickersInfo ctx endpoint tickerId =
+  withSocket ctx Req $ \sock -> do
     debugM "QTIS" $ "Connecting to: " ++ T.unpack endpoint
     connect sock $ T.unpack endpoint
-    catMaybes <$> forM tickers (\tickerId -> do
-      debugM "QTIS" $ "Requesting: " ++ T.unpack tickerId
-      send sock [] $ BL.toStrict (tickerRequest tickerId)
-      response <- receiveMulti sock
-      let r = parseResponse response
-      debugM "QTIS" $ "Got response: " ++ show r
-      return r))
+    debugM "QTIS" $ "Requesting: " ++ T.unpack tickerId
+    send sock [] $ BL.toStrict tickerRequest
+    response <- receiveMulti sock
+    let r = parseResponse response
+    debugM "QTIS" $ "Got response: " ++ show r
+    case r of
+      Just resp -> return resp
+      Nothing   -> throw $ QTISFailure "Can't parse response"
   where
-    tickerRequest tickerId = encode $ object ["ticker" .= tickerId]
+    tickerRequest = encode $ object ["ticker" .= tickerId]
     parseResponse :: [BC8.ByteString] -> Maybe TickerInfo
     parseResponse (header:payload:_) = if header == "OK"
       then decode $ BL.fromStrict payload

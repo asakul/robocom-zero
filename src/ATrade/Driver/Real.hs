@@ -19,14 +19,16 @@ import           ATrade.Driver.Real.BrokerClientThread
 import           ATrade.Driver.Real.QuoteSourceThread
 import           ATrade.Driver.Types                   (InitializationCallback, StrategyInstanceParams (..))
 import           ATrade.Exceptions
-import           ATrade.Quotes
+import           ATrade.Quotes                         (MonadHistory (..), MonadInstrumentParametersSource (..))
 import           ATrade.Quotes.QHP                     as QQ
+import           ATrade.Quotes.QTIS                    (TickerInfo (..),
+                                                        qtisGetTickersInfo)
 import           ATrade.RoboCom.Monad                  (Event (..),
                                                         EventCallback,
                                                         MonadRobot (..),
                                                         StrategyEnvironment (..),
                                                         seBars, seLastTimestamp)
-import           ATrade.RoboCom.Types                  (BarSeries (..),
+import           ATrade.RoboCom.Types                  (BarSeries (..), InstrumentParameters (..),
                                                         Ticker (..),
                                                         Timeframe (..))
 import           ATrade.RoboCom.Utils                  (fromHMS)
@@ -72,7 +74,7 @@ data Params = Params {
   historyProviderType :: Maybe String,
   historyProvider     :: Maybe String,
   redisSocket         :: Maybe String,
-  qtisSocket          :: Maybe String,
+  qtisEndpoint        :: String,
   accountId           :: String,
   volumeFactor        :: Int,
   sourceBarTimeframe  :: Maybe Int
@@ -104,9 +106,9 @@ paramsParser = Params
   <*> optional ( strOption
     (     long "redis-socket"
       <>  metavar "ADDRESS" ))
-  <*> optional ( strOption
+  <*> strOption
     (     long "qtis"
-      <>  metavar "ENDPOINT/ID" ))
+      <>  metavar "ENDPOINT/ID" )
   <*> strOption
     (     long "account"
       <>  metavar "ACCOUNT" )
@@ -118,7 +120,9 @@ paramsParser = Params
       <> metavar "SECONDS" ))
 
 data Env historySource c s = Env {
+  envZeromqContext          :: Context,
   envHistorySource          :: historySource,
+  envQtisEndpoint           :: T.Text,
   envStrategyInstanceParams :: StrategyInstanceParams,
   envStrategyEnvironment    :: IORef StrategyEnvironment,
   envConfigRef              :: IORef c,
@@ -172,6 +176,20 @@ instance MonadHistory (App QQ.QHPHandle c s) where
     qhp <- asks envHistorySource
     QQ.requestHistoryFromQHP qhp tickerId timeframe fromTime toTime
 
+instance MonadInstrumentParametersSource (App hs c s) where
+  getInstrumentParameters tickerIds = do
+    ctx <- asks envZeromqContext
+    ep <- asks envQtisEndpoint
+    info <- liftIO $ qtisGetTickersInfo ctx ep tickerIds
+    return $ (tiTicker info, convert info)
+    where
+      convert info = InstrumentParameters
+                       {
+                         ipLotSize = fromInteger $ tiLotSize info,
+                         ipTickSize = tiTickSize info
+                       }
+
+
 data BigConfig c = BigConfig {
   confTickers    :: [Ticker],
   strategyConfig :: c
@@ -205,9 +223,6 @@ storeState params stateRef timersRef = do
         Left _  -> warningM "main" "Unable to save state"
         Right _ -> return ()
 
-
-
-
 gracefulShutdown :: (ToJSON s) => Params -> IORef s -> IORef [UTCTime] -> MVar () -> Signal -> IO ()
 gracefulShutdown params stateRef timersRef shutdownMv _ = do
   infoM "main" "Shutdown, saving state"
@@ -215,8 +230,8 @@ gracefulShutdown params stateRef timersRef shutdownMv _ = do
   putMVar shutdownMv ()
   exitSuccess
 
-robotMain :: (ToJSON s, FromJSON s, FromJSON c) => DiffTime -> s -> Maybe (InitializationCallback c) -> EventCallback c s -> IO ()
-robotMain dataDownloadDelta defaultState initCallback callback = do
+robotMain :: (ToJSON s, FromJSON s, FromJSON c) => DiffTime -> s -> EventCallback c s -> IO ()
+robotMain dataDownloadDelta defaultState callback = do
   params <- execParser opts
   initLogging params
   infoM "main" "Starting"
@@ -230,14 +245,10 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
     strategyAccount = T.pack . accountId $ params,
     strategyVolume = volumeFactor params,
     tickers = tickerList,
-    strategyQTISEp = T.pack <$> qtisSocket params}
-
-  updatedConfig <- case initCallback of
-    Just cb -> cb config instanceParams
-    Nothing -> return config
+    strategyQTISEp = Nothing }
 
   stateRef <- newIORef stratState
-  configRef <- newIORef updatedConfig
+  configRef <- newIORef config
   timersRef <- newIORef timersState
   shutdownMv <- newEmptyMVar
   installHandler sigINT (gracefulShutdown params stateRef timersRef shutdownMv)
@@ -273,6 +284,8 @@ robotMain dataDownloadDelta defaultState initCallback callback = do
         now <- getCurrentTime >>= newIORef
 
         let env = Env {
+            envZeromqContext = ctx,
+            envQtisEndpoint = T.pack . qtisEndpoint $ params,
             envHistorySource = mkQHPHandle ctx (T.pack . fromMaybe "" . historyProvider $ params),
             envStrategyInstanceParams = instanceParams,
             envStrategyEnvironment = straEnv,
@@ -393,7 +406,8 @@ barStrategyDriver downloadDelta instanceParams callback shutdownVar = do
     loadTickerHistory now t = do
       history <- getHistory (code t) (BarTimeframe (fromInteger . timeframeSeconds $ t))
                  ((fromRational . toRational . negate $ downloadDelta) `addUTCTime` now) now
-      return (code t, BarSeries (code t) (Timeframe (timeframeSeconds t)) history)
+      instrumentParams <- snd <$> getInstrumentParameters (code t)
+      return (code t, BarSeries (code t) (Timeframe (timeframeSeconds t)) history instrumentParams)
 
     readAndHandleEvents agg instanceParams' = do
         eventChan <- asks envEventChan

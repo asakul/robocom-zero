@@ -13,6 +13,7 @@ data RoboComException = UnableToLoadConfig T.Text
                       | UnableToLoadState T.Text
                       | UnableToSaveState T.Text
                       | BadParams T.Text
+                      | QTISFailure T.Text
   deriving (Show, Generic)
 
 instance Exception RoboComException
