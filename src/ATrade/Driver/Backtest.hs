@@ -96,8 +96,8 @@ feedArgParser = eitherReader (\s -> case splitOn ":" s of
   [tid, fpath] -> Right $ Feed (T.pack tid) fpath
   _            -> Left $ "Unable to parse feed id: " ++ s)
 
-backtestMain :: (FromJSON c, StateHasPositions s) => DiffTime -> s -> Maybe (InitializationCallback c) -> EventCallback c s -> IO ()
-backtestMain _dataDownloadDelta defaultState initCallback callback = do
+backtestMain :: (FromJSON c, StateHasPositions s) => DiffTime -> s -> EventCallback c s -> IO ()
+backtestMain _dataDownloadDelta defaultState callback = do
   params <- execParser opts
   (tickerList, config) <- loadStrategyConfig params
 
@@ -108,15 +108,11 @@ backtestMain _dataDownloadDelta defaultState initCallback callback = do
     tickers = tickerList,
     strategyQTISEp = Nothing }
 
-  updatedConfig <- case initCallback of
-    Just cb -> cb config instanceParams
-    Nothing -> return config
-
   feeds <- loadFeeds (paramsFeeds params)
 
   bars <- makeBars (T.pack $ qtisEndpoint params) tickerList
 
-  runBacktestDriver feeds updatedConfig bars
+  runBacktestDriver feeds config bars
   where
     opts = info (helper <*> paramsParser)
       ( fullDesc <> header "ATrade strategy backtesting framework" )
