@@ -1,5 +1,5 @@
 name:                robocom-zero
-version:             0.1.0.0
+version:             0.2.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/asakul/robocom-zero#readme
@@ -7,7 +7,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Denis Tereshkin
 maintainer:          denis@kasan.ws
-copyright:           2018 Denis Tereshkin
+copyright:           2021 Denis Tereshkin
 category:            Web
 build-type:          Simple
 extra-source-files:  README.md
