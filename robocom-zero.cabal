@@ -27,6 +27,8 @@ library
                      , ATrade.Quotes.QTIS
                      , ATrade.Driver.Real
                      , ATrade.Driver.Backtest
+                     , ATrade.Driver.Junction
+                     , ATrade.Driver.Junction.Types
                      , ATrade.BarAggregator
                      , ATrade.RoboCom
   other-modules:       Paths_robocom_zero
