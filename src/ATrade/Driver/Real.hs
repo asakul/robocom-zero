@@ -417,6 +417,7 @@ barStrategyDriver downloadDelta instanceParams callback shutdownVar = do
             env <- getEnvironment
             let newTimestamp = case event of
                   NewTick tick -> timestamp tick
+                  NewBar bar   -> barTimestamp bar
                   _            -> env ^. seLastTimestamp
             nowRef <- asks envLastTimestamp
             lift $ writeIORef nowRef newTimestamp
