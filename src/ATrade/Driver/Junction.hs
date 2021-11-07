@@ -1,3 +1,4 @@
+{-# LANGUAGE OverloadedStrings #-}
 
 module ATrade.Driver.Junction
   (
@@ -7,14 +8,33 @@ module ATrade.Driver.Junction
 import           ATrade.Driver.Junction.Types (StrategyDescriptor (..),
                                                StrategyInstance (..),
                                                StrategyInstanceDescriptor (..))
-import           Data.Aeson                   (decode)
+import           ATrade.RoboCom.Types         (Ticker (..))
+import           Data.Aeson                   (FromJSON (..), ToJSON (..),
+                                               decode, object, withObject, (.:),
+                                               (.=))
 import qualified Data.ByteString              as B
 import qualified Data.ByteString.Lazy         as BL
 import           Data.IORef
 import qualified Data.Map.Strict              as M
+import           Data.Maybe                   (fromMaybe)
 import qualified Data.Text                    as T
 
-load :: T.Text -> IO B.ByteString
+data BigConfig c = BigConfig {
+  confTickers  :: [Ticker],
+  confStrategy :: c
+}
+
+instance (FromJSON c) => FromJSON (BigConfig c) where
+  parseJSON = withObject "object" (\obj -> BigConfig <$>
+    obj .: "tickers" <*>
+    obj .: "params")
+
+instance (ToJSON c) => ToJSON (BigConfig c) where
+  toJSON conf = object ["tickers" .= confTickers conf,
+    "params" .= confStrategy conf ]
+
+
+load :: T.Text -> IO (Maybe B.ByteString)
 load = undefined
 
 junctionMain :: M.Map T.Text StrategyDescriptor -> IO ()
@@ -36,10 +56,10 @@ junctionMain descriptors = do
       sState <- load (stateKey desc)
       sCfg <- load (configKey desc)
       case M.lookup (strategyId desc) descriptors of
-        Just (StrategyDescriptor _sName sCallback _sDefState) ->
-          case (decode $ BL.fromStrict sCfg, decode $ BL.fromStrict sState) of
-            (Just pCfg, Just pState) -> do
-              cfgRef <- newIORef pCfg
+        Just (StrategyDescriptor _sName sCallback sDefState) ->
+          case (sCfg >>= decode . BL.fromStrict, fromMaybe sDefState (sState >>= decode . BL.fromStrict)) of
+            (Just bigConfig, pState) -> do
+              cfgRef <- newIORef (confStrategy bigConfig)
               stateRef <- newIORef pState
               return $ StrategyInstance
                 {
@@ -48,10 +68,10 @@ junctionMain descriptors = do
                   strategyState = stateRef,
                   strategyConfig = cfgRef
                 }
-            _ -> undefined
-        _ -> undefined
+            _ -> error "Can't read state and config"
+        _ -> error $ "Can't find strategy: " ++ T.unpack (strategyId desc)
 
-    start = undefined
+    start strategy = undefined
 
 
 
