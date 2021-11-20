@@ -145,7 +145,7 @@ modifyPositions f = do
   modifyState (\s -> setPositions s (f pos))
 
 class ParamsHasMainTicker a where
-  mainTicker :: a -> TickerId
+  mainTicker :: a -> BarSeriesId
 
 -- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements intact.
 findAndModify :: (a -> Bool) -> (a -> a) -> [a] -> [a]
@@ -464,7 +464,7 @@ enterAtMarket operationSignalName operation = do
 
 enterAtMarketWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Int -> SignalId -> Operation -> m Position
 enterAtMarketWithParams account quantity signalId operation = do
-  tickerId <- mainTicker <$> getConfig
+  tickerId <- bsidTickerId . mainTicker <$> getConfig
   submitOrder $ order tickerId
   newPosition (order tickerId) account tickerId operation quantity 20
   where
@@ -490,7 +490,7 @@ enterAtLimitWithVolume timeToCancel operationSignalName price vol operation = do
 
 enterAtLimitWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitWithParams timeToCancel account quantity signalId price operation = do
-  tickerId <- mainTicker <$> getConfig
+  tickerId <- bsidTickerId . mainTicker <$> getConfig
   enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation
 
 enterAtLimitForTickerWithVolume :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Price -> Int -> Operation -> m Position

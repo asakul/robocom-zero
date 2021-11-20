@@ -1,3 +1,5 @@
+{-# LANGUAGE DeriveGeneric             #-}
+{-# LANGUAGE DuplicateRecordFields     #-}
 {-# LANGUAGE ExistentialQuantification #-}
 {-# LANGUAGE RankNTypes                #-}
 
@@ -12,9 +14,10 @@ module ATrade.Driver.Junction.Types
 import           ATrade.RoboCom.Monad (EventCallback)
 import           ATrade.Types         (BarTimeframe, TickerId)
 import           Data.Aeson           (FromJSON (..), ToJSON (..))
-import qualified Data.ByteString      as B
 import           Data.IORef
 import qualified Data.Text            as T
+import           Dhall                (FromDhall)
+import           GHC.Generics         (Generic)
 
 data StrategyDescriptor =
   forall c s. (FromJSON s, ToJSON s, FromJSON c) =>
@@ -39,9 +42,10 @@ data StrategyInstanceDescriptor =
     strategyName :: T.Text,
     configKey    :: T.Text,
     stateKey     :: T.Text,
-    logPath      :: T.Text,
-    tickers      :: [TickerConfig]
-  }
+    logPath      :: T.Text
+  } deriving (Generic, Show)
+
+instance FromDhall StrategyInstanceDescriptor
 
 data StrategyInstance =
   forall c s. (FromJSON s, ToJSON s, FromJSON c) =>

@@ -20,6 +20,7 @@ import qualified Data.Text          as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 
+import           Data.Int           (Int64)
 import           Text.Read          hiding (String)
 
 rescaleToDaily :: [Bar] -> [Bar]
@@ -36,13 +37,13 @@ rescaleToDaily (firstBar:restBars) = rescaleToDaily' restBars firstBar
 
 rescaleToDaily [] = []
 
-barEndTime :: Bar -> Integer -> UTCTime
+barEndTime :: Bar -> Int64 -> UTCTime
 barEndTime bar tframe = addUTCTime (fromIntegral $ (1 + barNumber (barTimestamp bar) tframe) * tframe) epoch
 
-barStartTime :: Bar -> Integer -> UTCTime
+barStartTime :: Bar -> Int64 -> UTCTime
 barStartTime bar tframe = addUTCTime (fromIntegral $ barNumber (barTimestamp bar) tframe * tframe) epoch
 
-barNumber :: UTCTime -> Integer -> Integer
+barNumber :: UTCTime -> Int64 -> Int64
 barNumber ts barlen = floor (diffUTCTime ts epoch) `div` barlen
 
 epoch :: UTCTime

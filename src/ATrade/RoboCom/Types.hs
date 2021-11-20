@@ -1,3 +1,4 @@
+{-# LANGUAGE DeriveGeneric        #-}
 {-# LANGUAGE FlexibleContexts     #-}
 {-# LANGUAGE FlexibleInstances    #-}
 {-# LANGUAGE OverloadedStrings    #-}
@@ -6,12 +7,12 @@
 
 module ATrade.RoboCom.Types (
   Bar(..),
+  BarSeriesId(..),
   BarSeries(..),
-  Timeframe(..),
-  tfSeconds,
   Ticker(..),
   Bars,
-  InstrumentParameters(..)
+  InstrumentParameters(..),
+  bsidTickerId
 ) where
 
 import           ATrade.Types
@@ -20,12 +21,8 @@ import           Data.Aeson.Types
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict     as M
 import qualified Data.Text           as T
+import           GHC.Generics        (Generic)
 
-newtype Timeframe =
-  Timeframe Integer deriving (Show, Eq)
-
-tfSeconds :: (Num a) => Timeframe -> a
-tfSeconds (Timeframe s) = fromInteger s
 
 data InstrumentParameters =
   InstrumentParameters {
@@ -36,7 +33,7 @@ data InstrumentParameters =
 data BarSeries =
   BarSeries {
     bsTickerId  :: TickerId,
-    bsTimeframe :: Timeframe,
+    bsTimeframe :: BarTimeframe,
     bsBars      :: [Bar],
     bsParams    :: InstrumentParameters
   } deriving (Show, Eq)
@@ -68,5 +65,11 @@ instance ToJSON Ticker where
     "timeframe" .= timeframeSeconds t,
     "aliases" .= Object (HM.fromList $ fmap (\(x, y) -> (T.pack x, String $ T.pack y)) $ aliases t) ]
 
-type Bars = M.Map TickerId BarSeries
+data BarSeriesId = BarSeriesId TickerId BarTimeframe
+  deriving (Show, Eq, Generic, Ord)
+
+bsidTickerId :: BarSeriesId -> TickerId
+bsidTickerId (BarSeriesId tid _) = tid
+
+type Bars = M.Map BarSeriesId BarSeries
 

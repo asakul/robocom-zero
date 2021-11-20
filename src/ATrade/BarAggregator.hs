@@ -79,12 +79,12 @@ handleTick tick = runState $ do
       case M.lookup (security tick) mybars of
         Just series -> case bsBars series of
           (b:bs) -> do
-            let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
+            let currentBn = barNumber (barTimestamp b) (fromIntegral . unBarTimeframe $ bsTimeframe series)
             case datatype tick of
               LastTradePrice ->
                 if volume tick > 0
                   then
-                    if currentBn == barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
+                    if currentBn == barNumber (timestamp tick) (fromIntegral . unBarTimeframe $ bsTimeframe series)
                       then do
                         lBars %= M.insert (security tick) series { bsBars = updateBar b tick : bs }
                         return Nothing
@@ -94,7 +94,7 @@ handleTick tick = runState $ do
                   else
                     return Nothing
               _ ->
-                if currentBn == barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
+                if currentBn == barNumber (timestamp tick) (fromIntegral . unBarTimeframe $ bsTimeframe series)
                   then do
                     lBars %= M.insert (security tick) series { bsBars = updateBarTimestamp b tick : bs }
                     return Nothing
@@ -147,8 +147,8 @@ updateTime tick = runState $ do
       case M.lookup (security tick) mybars of
         Just series -> case bsBars series of
           (b:bs) -> do
-            let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
-            let thisBn = barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
+            let currentBn = barNumber (barTimestamp b) (fromIntegral . unBarTimeframe $ bsTimeframe series)
+            let thisBn = barNumber (timestamp tick) (fromIntegral . unBarTimeframe $ bsTimeframe series)
             if
               | currentBn == thisBn -> do
                   lBars %= M.insert (security tick) series { bsBars = updateBarTimestamp b tick : bs }
