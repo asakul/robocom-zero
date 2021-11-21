@@ -1,5 +1,6 @@
-{-# LANGUAGE DeriveGeneric #-}
-{-# LANGUAGE LambdaCase    #-}
+{-# LANGUAGE DeriveGeneric       #-}
+{-# LANGUAGE LambdaCase          #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 
 module ATrade.Driver.Junction.QuoteThread
  (
@@ -9,43 +10,39 @@ module ATrade.Driver.Junction.QuoteThread
    addSubscription
  ) where
 
-import           ATrade.Quotes.HistoryProvider    (HistoryProvider (..))
-import           ATrade.Quotes.TickerInfoProvider (TickerInfoProvider (..))
-import           ATrade.QuoteSource.Client        (QuoteData (QDBar, QDTick),
-                                                   QuoteSourceClientHandle,
-                                                   quoteSourceClientSubscribe,
-                                                   startQuoteSourceClient,
-                                                   stopQuoteSourceClient)
-import           ATrade.RoboCom.Types             (Bar (barSecurity),
-                                                   BarSeries (..),
-                                                   BarSeriesId (BarSeriesId),
-                                                   Bars, InstrumentParameters)
-import           ATrade.Types                     (BarTimeframe (BarTimeframe), ClientSecurityParams (ClientSecurityParams),
-                                                   Tick (security), TickerId)
-import           Control.Concurrent               (ThreadId, forkIO, killThread)
-import           Control.Concurrent.BoundedChan   (BoundedChan, newBoundedChan,
-                                                   readChan, writeChan)
-import           Control.Monad                    (forever)
-import           Control.Monad.Reader             (MonadIO (liftIO),
-                                                   ReaderT (runReaderT), lift)
-import           Control.Monad.Reader.Class       (asks)
-import           Data.Hashable                    (Hashable)
-import qualified Data.HashMap.Strict              as HM
-import           Data.IORef                       (IORef, atomicModifyIORef',
-                                                   newIORef, readIORef)
-import qualified Data.Map.Strict                  as M
-import qualified Data.Text                        as T
-import           Data.Time                        (addUTCTime, getCurrentTime)
-import           GHC.Generics                     (Generic)
-import           System.ZMQ4                      (Context)
-import           System.ZMQ4.ZAP                  (CurveCertificate)
+import           ATrade.Driver.Junction.QuoteStream (QuoteSubscription (..))
+import           ATrade.Quotes.HistoryProvider      (HistoryProvider (..))
+import           ATrade.Quotes.TickerInfoProvider   (TickerInfoProvider (..))
+import           ATrade.QuoteSource.Client          (QuoteData (QDBar, QDTick),
+                                                     QuoteSourceClientHandle,
+                                                     quoteSourceClientSubscribe,
+                                                     startQuoteSourceClient,
+                                                     stopQuoteSourceClient)
+import           ATrade.RoboCom.Types               (Bar (barSecurity),
+                                                     BarSeries (..),
+                                                     BarSeriesId (BarSeriesId),
+                                                     Bars, InstrumentParameters)
+import           ATrade.Types                       (BarTimeframe (BarTimeframe),
+                                                     ClientSecurityParams (ClientSecurityParams),
+                                                     Tick (security), TickerId)
+import           Control.Concurrent                 (ThreadId, forkIO,
+                                                     killThread)
+import           Control.Concurrent.BoundedChan     (BoundedChan,
+                                                     newBoundedChan, readChan,
+                                                     writeChan)
+import           Control.Monad                      (forever)
+import           Control.Monad.Reader               (MonadIO (liftIO),
+                                                     ReaderT (runReaderT), lift)
+import           Control.Monad.Reader.Class         (asks)
+import qualified Data.HashMap.Strict                as HM
+import           Data.IORef                         (IORef, atomicModifyIORef',
+                                                     newIORef, readIORef)
+import qualified Data.Map.Strict                    as M
+import qualified Data.Text                          as T
+import           Data.Time                          (addUTCTime, getCurrentTime)
+import           System.ZMQ4                        (Context)
+import           System.ZMQ4.ZAP                    (CurveCertificate)
 
-data QuoteSubscription =
-  QuoteSubscription TickerId BarTimeframe
-  deriving (Generic, Eq)
-
-instance Hashable BarTimeframe
-instance Hashable QuoteSubscription
 
 data QuoteThreadHandle = QuoteThreadHandle ThreadId ThreadId QuoteThreadEnv
 
@@ -56,48 +53,48 @@ data QuoteThreadEnv =
     endpoints   :: IORef (HM.HashMap QuoteSubscription [BoundedChan QuoteData]),
     qsclient    :: QuoteSourceClientHandle,
     paramsCache :: IORef (M.Map TickerId InstrumentParameters),
-    historyProvider :: HistoryProvider,
-    tickerInfoProvider :: TickerInfoProvider,
     downloaderChan :: BoundedChan QuoteSubscription
   }
 
-startQuoteThread :: (MonadIO m) =>
+startQuoteThread :: (MonadIO m,
+                     MonadIO m1,
+                     HistoryProvider m1,
+                     TickerInfoProvider m1) =>
   IORef Bars ->
   Context ->
   T.Text ->
   Maybe CurveCertificate ->
   Maybe CurveCertificate ->
-  HistoryProvider ->
-  TickerInfoProvider ->
+  (m1 () -> IO ()) ->
   m QuoteThreadHandle
-startQuoteThread barsRef ctx ep clientCert serverCert hp tip = do
+startQuoteThread barsRef ctx ep clientCert serverCert downloadThreadRunner = do
   chan <- liftIO $ newBoundedChan 2000
   dChan <- liftIO $ newBoundedChan 2000
   qsc <- liftIO $ startQuoteSourceClient chan [] ctx ep (ClientSecurityParams clientCert serverCert)
-  env <- liftIO $ QuoteThreadEnv barsRef <$> newIORef HM.empty <*> pure qsc <*> newIORef M.empty <*> pure hp <*> pure tip <*> pure dChan
+  env <- liftIO $ QuoteThreadEnv barsRef <$> newIORef HM.empty <*> pure qsc <*> newIORef M.empty <*> pure dChan
   tid <- liftIO . forkIO $ quoteThread env chan
-  downloaderTid <- liftIO . forkIO $ downloaderThread env dChan
+  downloaderTid <- liftIO . forkIO $ downloadThreadRunner (downloaderThread env dChan)
   return $ QuoteThreadHandle tid downloaderTid env
   where
     downloaderThread env chan = forever $ do
-      QuoteSubscription tickerid tf <- readChan chan
+      QuoteSubscription tickerid tf <- liftIO $ readChan chan
       paramsMap <- liftIO $ readIORef $ paramsCache env
       mbParams <- case M.lookup tickerid paramsMap of
         Nothing -> do
-          paramsList <- liftIO $ getInstrumentParameters (tickerInfoProvider env) [tickerid]
+          paramsList <- getInstrumentParameters [tickerid]
           case paramsList of
             (params:_) -> liftIO $ atomicModifyIORef' (paramsCache env) (\m -> (M.insert tickerid params m, Just params))
             _ -> return Nothing
         Just params -> return $ Just params
-      barsMap <- readIORef (bars env)
+      barsMap <- liftIO $ readIORef (bars env)
       case M.lookup (BarSeriesId tickerid tf) barsMap of
         Just _ -> return () -- already downloaded
         Nothing -> case mbParams of
           Just params -> do
             now <- liftIO getCurrentTime
-            barsData <- liftIO $ getHistory (historyProvider env) tickerid tf ((-86400 * 60) `addUTCTime` now) now
+            barsData <- getHistory tickerid tf ((-86400 * 60) `addUTCTime` now) now
             let barSeries = BarSeries tickerid tf barsData params
-            atomicModifyIORef' (bars env) (\m -> (M.insert (BarSeriesId tickerid tf) barSeries m, ()))
+            liftIO $ atomicModifyIORef' (bars env) (\m -> (M.insert (BarSeriesId tickerid tf) barSeries m, ()))
           _ -> return () -- TODO log
 
 

@@ -17,8 +17,10 @@ library
   hs-source-dirs:      src
   ghc-options:         -Wall -fno-warn-orphans -Wno-type-defaults
   exposed-modules:     ATrade.RoboCom.Indicators
+                     , ATrade.RoboCom.ConfigStorage
                      , ATrade.RoboCom.Monad
                      , ATrade.RoboCom.Positions
+                     , ATrade.RoboCom.Persistence
                      , ATrade.RoboCom.Types
                      , ATrade.RoboCom.Utils
                      , ATrade.Quotes
@@ -29,9 +31,11 @@ library
 --                     , ATrade.Driver.Backtest
                      , ATrade.Driver.Junction
                      , ATrade.Driver.Junction.Types
+                     , ATrade.Driver.Junction.QuoteThread
+                     , ATrade.Driver.Junction.QuoteStream
+                     , ATrade.Driver.Junction.RobotDriverThread
                      , ATrade.BarAggregator
                      , ATrade.RoboCom
-                     , ATrade.Driver.Junction.QuoteThread
                      , ATrade.Quotes.HistoryProvider
                      , ATrade.Quotes.TickerInfoProvider
   other-modules:       Paths_robocom_zero
@@ -109,7 +113,7 @@ test-suite robots-test
                      , zeromq4-haskell
                      , zeromq4-haskell-zap
                      , BoundedChan
-                     , hslogger
+                     , mtl
   ghc-options:         -threaded -rtsopts -with-rtsopts=-N
   default-language:    Haskell2010
   other-modules:     Test.RoboCom.Indicators

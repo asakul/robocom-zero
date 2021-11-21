@@ -7,8 +7,6 @@ module ATrade.Quotes.HistoryProvider
 import           ATrade.RoboCom.Types (Bar)
 import           ATrade.Types         (BarTimeframe, TickerId)
 import           Data.Time            (UTCTime)
-newtype HistoryProvider =
-  HistoryProvider
- {
-   getHistory :: TickerId -> BarTimeframe -> UTCTime -> UTCTime -> IO [Bar]
- }
+
+class (Monad m) => HistoryProvider m where
+  getHistory :: TickerId -> BarTimeframe -> UTCTime -> UTCTime -> m [Bar]

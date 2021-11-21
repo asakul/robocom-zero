@@ -6,8 +6,7 @@ module ATrade.Quotes.TickerInfoProvider
 
 import           ATrade.RoboCom.Types (InstrumentParameters)
 import           ATrade.Types         (TickerId)
-newtype TickerInfoProvider =
-  TickerInfoProvider
- {
-   getInstrumentParameters :: [TickerId] -> IO [InstrumentParameters]
- }
+
+class (Monad m) => TickerInfoProvider m where
+  getInstrumentParameters :: [TickerId] -> m [InstrumentParameters]
+

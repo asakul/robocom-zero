@@ -1,4 +1,7 @@
-{-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE OverloadedStrings          #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 
 module Test.Driver.Junction.QuoteThread
 (
@@ -13,6 +16,8 @@ import           Test.Tasty.SmallCheck              as SC
 import           ATrade.Driver.Junction.QuoteThread (addSubscription,
                                                      startQuoteThread,
                                                      stopQuoteThread)
+import           ATrade.Quotes.HistoryProvider      (HistoryProvider (..))
+import           ATrade.Quotes.TickerInfoProvider   (TickerInfoProvider (..))
 import           ATrade.QuoteSource.Client          (QuoteData (QDBar))
 import           ATrade.QuoteSource.Server          (QuoteSourceServerData (..),
                                                      startQuoteSourceServer,
@@ -26,6 +31,7 @@ import           Control.Concurrent.BoundedChan     (newBoundedChan, readChan,
                                                      writeChan)
 import           Control.Exception                  (bracket)
 import           Control.Monad                      (forever)
+import           Control.Monad.Reader
 import           Data.IORef                         (newIORef, readIORef)
 import qualified Data.Map.Strict                    as M
 import qualified Data.Text                          as T
@@ -38,8 +44,31 @@ import           System.Log.Handler                 (setFormatter)
 import           System.Log.Handler.Simple
 import           System.Log.Logger
 import           System.ZMQ4                        (withContext)
-import           Test.Mock.HistoryProvider          (mkMockHistoryProvider)
-import           Test.Mock.TickerInfoProvider       (mkMockTickerInfoProvider)
+import           Test.Mock.HistoryProvider          (MockHistoryProvider,
+                                                     mkMockHistoryProvider,
+                                                     mockGetHistory)
+import           Test.Mock.TickerInfoProvider       (MockTickerInfoProvider,
+                                                     mkMockTickerInfoProvider,
+                                                     mockGetInstrumentParameters)
+
+data TestEnv =
+  TestEnv
+  {
+    historyProvider    :: MockHistoryProvider,
+    tickerInfoProvider :: MockTickerInfoProvider
+  }
+
+type TestM = ReaderT TestEnv IO
+
+instance HistoryProvider TestM where
+  getHistory tid tf from to = do
+    hp <- asks historyProvider
+    liftIO $ mockGetHistory hp tid tf from to
+
+instance TickerInfoProvider TestM where
+  getInstrumentParameters tickers = do
+    tip <- asks tickerInfoProvider
+    liftIO $ mockGetInstrumentParameters tip tickers
 
 qsEndpoint = "inproc://qs"
 
@@ -61,7 +90,8 @@ testSubscription = testCase "Subscription" $ withContext $ \ctx -> do
     (startQuoteSourceServer serverChan ctx qsEndpoint defaultServerSecurityParams)
     stopQuoteSourceServer $ \_ ->
       bracket
-        (startQuoteThread barsRef ctx qsEndpoint Nothing Nothing mockHistoryProvider mockTickerInfoProvider)
+        (startQuoteThread barsRef ctx qsEndpoint Nothing Nothing (`runReaderT` (TestEnv mockHistoryProvider mockTickerInfoProvider)))
+
         stopQuoteThread $ \qt -> do
           chan <- newBoundedChan 2000
           addSubscription qt "FOO" (BarTimeframe 3600) chan
