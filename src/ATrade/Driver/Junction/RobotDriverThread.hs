@@ -43,7 +43,9 @@ import           Data.Aeson                         (FromJSON, ToJSON)
 import           Data.IORef                         (IORef, readIORef,
                                                      writeIORef)
 import qualified Data.Map.Strict                    as M
+import qualified Data.Text.Lazy                     as TL
 import           Dhall                              (FromDhall)
+import           System.Log.Logger                  (infoM)
 
 data RobotDriverHandle = forall c s. RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent)
 
@@ -128,7 +130,8 @@ instance MonadRobot (RobotM c s) c s where
     bro <- asks broker
     liftIO $ void $ Bro.cancelOrder bro oid
 
-  appendToLog = undefined
+  appendToLog = liftIO . infoM "Robot" . TL.unpack
+
   setupTimer = undefined
   enqueueIOAction = undefined
   getConfig = asks configRef >>= liftIO . readIORef
