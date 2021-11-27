@@ -26,6 +26,7 @@ import           GHC.Generics        (Generic)
 
 data InstrumentParameters =
   InstrumentParameters {
+    ipTickerId :: TickerId,
     ipLotSize  :: Int,
     ipTickSize :: Price
   } deriving (Show, Eq)

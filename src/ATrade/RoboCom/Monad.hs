@@ -13,7 +13,6 @@ module ATrade.RoboCom.Monad (
   seInstanceId,
   seAccount,
   seVolume,
-  seBars,
   seLastTimestamp,
   EventCallback,
   Event(..),
@@ -48,13 +47,14 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
     oldState <- getState
     setState (f oldState)
   getEnvironment :: m StrategyEnvironment
+  getTicker :: TickerId -> BarTimeframe -> m (Maybe BarSeries)
 
 st :: QuasiQuoter
 st = t
 
 type EventCallback c s = forall m . MonadRobot m c s => Event -> m ()
 
-data Event = NewBar Bar
+data Event = NewBar (BarTimeframe, Bar)
   | NewTick Tick
   | OrderSubmitted Order
   | OrderUpdate OrderId OrderState
@@ -68,7 +68,6 @@ data StrategyEnvironment = StrategyEnvironment {
   _seInstanceId    :: !T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
   _seAccount       :: !T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
   _seVolume        :: !Int, -- ^ Volume to use for this instance (in lots/contracts)
-  _seBars          :: !Bars, -- ^ List of tickers which is used by this strategy
   _seLastTimestamp :: !UTCTime
 } deriving (Eq)
 makeLenses ''StrategyEnvironment

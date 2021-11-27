@@ -79,7 +79,6 @@ import           Control.Monad
 
 import           Data.Aeson
 import qualified Data.List            as L
-import qualified Data.Map             as M
 import qualified Data.Text            as T
 import qualified Data.Text.Lazy       as TL
 import           Data.Time.Clock
@@ -145,7 +144,7 @@ modifyPositions f = do
   modifyState (\s -> setPositions s (f pos))
 
 class ParamsHasMainTicker a where
-  mainTicker :: a -> BarSeriesId
+  mainTicker :: a -> (BarTimeframe, TickerId)
 
 -- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements intact.
 findAndModify :: (a -> Bool) -> (a -> a) -> [a] -> [a]
@@ -388,16 +387,16 @@ modifyPosition f oldpos = do
 
 getCurrentTicker :: (ParamsHasMainTicker c, MonadRobot m c s) => m [Bar]
 getCurrentTicker = do
-  mainTicker' <- mainTicker <$> getConfig
-  maybeBars <- view (seBars . at mainTicker') <$> getEnvironment
+  (tf, mainTicker') <- mainTicker <$> getConfig
+  maybeBars <- getTicker mainTicker' tf
   case maybeBars of
     Just b -> return $ bsBars b
     _      -> return []
 
 getCurrentTickerSeries :: (ParamsHasMainTicker c, MonadRobot m c s) => m (Maybe BarSeries)
 getCurrentTickerSeries = do
-  bars <- view seBars <$> getEnvironment
-  flip M.lookup bars . mainTicker <$> getConfig
+  (tf, mainTicker') <- mainTicker <$> getConfig
+  getTicker mainTicker' tf
 
 getLastActivePosition :: (StateHasPositions s, MonadRobot m c s) => m (Maybe Position)
 getLastActivePosition = L.find (\pos -> posState pos == PositionOpen) . getPositions <$> getState
@@ -418,8 +417,8 @@ getAllActiveAndPendingPositions = L.filter
 
 onNewBarEvent :: (MonadRobot m c s) => Event -> (Bar -> m ()) -> m ()
 onNewBarEvent event f = case event of
-  NewBar bar -> f bar
-  _          -> doNothing
+  NewBar (_, bar) -> f bar
+  _               -> doNothing
 
 onNewTickEvent :: (MonadRobot m c s) => Event -> (Tick -> m ()) -> m ()
 onNewTickEvent event f = case event of
@@ -464,7 +463,7 @@ enterAtMarket operationSignalName operation = do
 
 enterAtMarketWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Int -> SignalId -> Operation -> m Position
 enterAtMarketWithParams account quantity signalId operation = do
-  tickerId <- bsidTickerId . mainTicker <$> getConfig
+  tickerId <- snd . mainTicker <$> getConfig
   submitOrder $ order tickerId
   newPosition (order tickerId) account tickerId operation quantity 20
   where
@@ -490,7 +489,7 @@ enterAtLimitWithVolume timeToCancel operationSignalName price vol operation = do
 
 enterAtLimitWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitWithParams timeToCancel account quantity signalId price operation = do
-  tickerId <- bsidTickerId . mainTicker <$> getConfig
+  tickerId <- snd . mainTicker <$> getConfig
   enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation
 
 enterAtLimitForTickerWithVolume :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Price -> Int -> Operation -> m Position

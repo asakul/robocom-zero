@@ -34,6 +34,7 @@ library
                      , ATrade.Driver.Junction.QuoteThread
                      , ATrade.Driver.Junction.QuoteStream
                      , ATrade.Driver.Junction.RobotDriverThread
+                     , ATrade.Driver.Junction.ProgramConfiguration
                      , ATrade.BarAggregator
                      , ATrade.RoboCom
                      , ATrade.Quotes.HistoryProvider
