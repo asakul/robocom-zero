@@ -1,11 +1,18 @@
-{-# LANGUAGE ExistentialQuantification #-}
-{-# LANGUAGE RankNTypes                #-}
+{-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleInstances          #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE RankNTypes                 #-}
 
 module ATrade.Driver.Junction.RobotDriverThread
   (
-  createRobotDriverThread
+  createRobotDriverThread,
+  RobotEnv(..),
+  RobotM(..)
   ) where
 
+import           ATrade.Broker.Client               (BrokerClientHandle (submitOrder))
+import qualified ATrade.Broker.Client               as Bro
 import           ATrade.Driver.Junction.QuoteStream (QuoteStream (addSubscription),
                                                      QuoteSubscription (QuoteSubscription))
 import           ATrade.Driver.Junction.Types       (BigConfig,
@@ -19,17 +26,23 @@ import           ATrade.Driver.Junction.Types       (BigConfig,
 import           ATrade.QuoteSource.Client          (QuoteData (..))
 import           ATrade.RoboCom.ConfigStorage       (ConfigStorage (loadConfig))
 import           ATrade.RoboCom.Monad               (Event (NewBar, NewTick, NewTrade, OrderUpdate),
-                                                     EventCallback, MonadRobot)
+                                                     MonadRobot (..))
 import           ATrade.RoboCom.Persistence         (MonadPersistence (loadState))
+import           ATrade.RoboCom.Types               (BarSeriesId (BarSeriesId),
+                                                     Bars)
 import           ATrade.Types                       (OrderId, OrderState, Trade)
 import           Control.Concurrent                 (ThreadId, forkIO)
 import           Control.Concurrent.BoundedChan     (BoundedChan,
                                                      newBoundedChan, readChan,
                                                      writeChan)
-import           Control.Monad                      (forM_, forever)
+import           Control.Exception.Safe             (MonadThrow)
+import           Control.Monad                      (forM_, forever, void)
 import           Control.Monad.IO.Class             (MonadIO, liftIO)
+import           Control.Monad.Reader               (MonadReader, ReaderT, asks)
 import           Data.Aeson                         (FromJSON, ToJSON)
-import           Data.IORef                         (IORef, newIORef)
+import           Data.IORef                         (IORef, readIORef,
+                                                     writeIORef)
+import qualified Data.Map.Strict                    as M
 import           Dhall                              (FromDhall)
 
 data RobotDriverHandle = forall c s. RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent)
@@ -93,3 +106,35 @@ createRobotDriverThread instDesc strDesc runner bigConf rConf rState = do
     passQuoteEvents eventQueue quoteQueue = do
       v <- readChan quoteQueue
       writeChan eventQueue (QuoteEvent v)
+
+data RobotEnv c s =
+  RobotEnv
+  {
+    stateRef  :: IORef s,
+    configRef :: IORef c,
+    broker    :: BrokerClientHandle,
+    bars      :: IORef Bars
+  }
+
+newtype RobotM c s a = RobotM { unRobotM :: ReaderT (RobotEnv c s) IO a }
+  deriving (Functor, Applicative, Monad, MonadReader (RobotEnv c s), MonadIO, MonadThrow)
+
+instance MonadRobot (RobotM c s) c s where
+  submitOrder order = do
+    bro <- asks broker
+    liftIO $ void $ Bro.submitOrder bro order
+
+  cancelOrder oid = do
+    bro <- asks broker
+    liftIO $ void $ Bro.cancelOrder bro oid
+
+  appendToLog = undefined
+  setupTimer = undefined
+  enqueueIOAction = undefined
+  getConfig = asks configRef >>= liftIO . readIORef
+  getState = asks stateRef >>= liftIO . readIORef
+  setState newState = asks stateRef >>= liftIO . flip writeIORef newState
+  getEnvironment = undefined
+  getTicker tid tf = do
+    b <- asks bars >>= liftIO . readIORef
+    return $ M.lookup (BarSeriesId tid tf) b
