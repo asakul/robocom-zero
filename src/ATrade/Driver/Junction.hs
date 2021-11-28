@@ -1,5 +1,6 @@
 {-# LANGUAGE DeriveGeneric              #-}
 {-# LANGUAGE DuplicateRecordFields      #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
@@ -22,20 +23,24 @@ import           ATrade.Driver.Junction.QuoteThread          (DownloaderEnv (Dow
                                                               QuoteThreadHandle,
                                                               withQThread)
 import qualified ATrade.Driver.Junction.QuoteThread          as QT
-import           ATrade.Driver.Junction.RobotDriverThread    (RobotEnv (..),
+import           ATrade.Driver.Junction.RobotDriverThread    (RobotDriverHandle,
+                                                              RobotEnv (..),
                                                               RobotM (..),
-                                                              createRobotDriverThread)
+                                                              createRobotDriverThread,
+                                                              onStrategyInstance)
 import           ATrade.Driver.Junction.Types                (StrategyDescriptorE (StrategyDescriptorE),
+                                                              StrategyInstance (strategyInstanceId),
                                                               StrategyInstanceDescriptor (..),
-                                                              confStrategy)
+                                                              confStrategy,
+                                                              strategyState)
 import           ATrade.Quotes.QHP                           (mkQHPHandle)
 import           ATrade.RoboCom.ConfigStorage                (ConfigStorage (loadConfig))
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
 import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams))
+import           Control.Concurrent
 import           Control.Exception.Safe                      (MonadThrow,
                                                               bracket)
-import           Control.Monad                               (forM_)
-import           Control.Monad                               (void)
+import           Control.Monad                               (forM_, forever)
 import           Control.Monad.IO.Class                      (MonadIO (liftIO))
 import           Control.Monad.Reader                        (MonadReader, ReaderT (runReaderT),
                                                               asks)
@@ -43,7 +48,11 @@ import           Data.Aeson                                  (eitherDecode,
                                                               encode)
 import qualified Data.ByteString.Lazy                        as BL
 import           Data.Default                                (Default (def))
-import           Data.IORef                                  (newIORef)
+import           Data.Foldable                               (traverse_)
+import           Data.IORef                                  (IORef,
+                                                              atomicModifyIORef',
+                                                              newIORef,
+                                                              readIORef)
 import qualified Data.Map.Strict                             as M
 import qualified Data.Text                                   as T
 import           Data.Text.Encoding                          (encodeUtf8)
@@ -75,7 +84,8 @@ data JunctionEnv =
     peRedisSocket :: Connection,
     peConfigPath  :: FilePath,
     peQuoteThread :: QuoteThreadHandle,
-    peBroker      :: BrokerClientHandle
+    peBroker      :: BrokerClientHandle,
+    peRobots      :: IORef (M.Map T.Text RobotDriverHandle)
   }
 
 newtype JunctionM a = JunctionM { unJunctionM :: ReaderT JunctionEnv IO a }
@@ -136,26 +146,45 @@ junctionMain descriptors = do
     let downloaderEnv = DownloaderEnv (mkQHPHandle ctx (qhpEndpoint cfg)) ctx (qtisEndpoint cfg)
     withBroker cfg ctx $ \bro ->
       withQThread downloaderEnv barsMap cfg ctx $ \qt -> do
+        robotsMap <- newIORef M.empty
         let env =
               JunctionEnv
               {
                 peRedisSocket = redis,
                 peConfigPath = robotsConfigsPath cfg,
                 peQuoteThread = qt,
-                peBroker = bro
+                peBroker = bro,
+                peRobots = robotsMap
               }
-        withJunction env $
-          forM_ (instances cfg) $ \inst ->
-            case M.lookup (strategyBaseName inst) descriptors of
-              Just (StrategyDescriptorE desc) -> do
-                bigConf <- loadConfig (configKey inst)
-                rConf <- liftIO $ newIORef (confStrategy bigConf)
-                rState <- loadState (stateKey inst) >>= liftIO . newIORef
-                rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
-                let robotEnv = RobotEnv rState rConf rTimers bro barsMap
-                createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState
-              Nothing   -> error "Unknown strategy"
+        withJunction env $ do
+          startRobots cfg bro barsMap
+          forever $ do
+            saveRobots
+            liftIO $ threadDelay 5000000
   where
+    saveRobots :: JunctionM ()
+    saveRobots = do
+      robotsMap <- asks peRobots >>= (liftIO . readIORef)
+      traverse_ saveRobotState robotsMap
+
+    saveRobotState :: RobotDriverHandle -> JunctionM ()
+    saveRobotState handle = onStrategyInstance handle $ \inst -> do
+      currentState <- liftIO $ readIORef (strategyState inst)
+      saveState currentState (strategyInstanceId inst)
+
+    startRobots cfg bro barsMap = forM_ (instances cfg) $ \inst ->
+      case M.lookup (strategyBaseName inst) descriptors of
+        Just (StrategyDescriptorE desc) -> do
+          bigConf <- loadConfig (configKey inst)
+          rConf <- liftIO $ newIORef (confStrategy bigConf)
+          rState <- loadState (stateKey inst) >>= liftIO . newIORef
+          rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
+          let robotEnv = RobotEnv rState rConf rTimers bro barsMap
+          robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState
+          robotsMap' <- asks peRobots
+          liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
+        Nothing   -> error "Unknown strategy"
+
     withJunction :: JunctionEnv -> JunctionM () -> IO ()
     withJunction env = (`runReaderT` env) . unJunctionM
 

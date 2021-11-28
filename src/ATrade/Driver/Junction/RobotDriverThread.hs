@@ -8,10 +8,12 @@ module ATrade.Driver.Junction.RobotDriverThread
   (
   createRobotDriverThread,
   RobotEnv(..),
-  RobotM(..)
+  RobotM(..),
+  RobotDriverHandle,
+  onStrategyInstance
   ) where
 
-import           ATrade.Broker.Client               (BrokerClientHandle (submitOrder))
+import           ATrade.Broker.Client               (BrokerClientHandle)
 import qualified ATrade.Broker.Client               as Bro
 import           ATrade.Driver.Junction.QuoteStream (QuoteStream (addSubscription),
                                                      QuoteSubscription (QuoteSubscription))
@@ -24,10 +26,10 @@ import           ATrade.Driver.Junction.Types       (BigConfig,
                                                      strategyId, tickerId,
                                                      timeframe)
 import           ATrade.QuoteSource.Client          (QuoteData (..))
-import           ATrade.RoboCom.ConfigStorage       (ConfigStorage (loadConfig))
+import           ATrade.RoboCom.ConfigStorage       (ConfigStorage)
 import           ATrade.RoboCom.Monad               (Event (NewBar, NewTick, NewTrade, OrderUpdate),
                                                      MonadRobot (..))
-import           ATrade.RoboCom.Persistence         (MonadPersistence (loadState))
+import           ATrade.RoboCom.Persistence         (MonadPersistence)
 import           ATrade.RoboCom.Types               (BarSeriesId (BarSeriesId),
                                                      Bars)
 import           ATrade.Types                       (OrderId, OrderState, Trade)
@@ -40,6 +42,7 @@ import           Control.Monad                      (forM_, forever, void)
 import           Control.Monad.IO.Class             (MonadIO, liftIO)
 import           Control.Monad.Reader               (MonadReader, ReaderT, asks)
 import           Data.Aeson                         (FromJSON, ToJSON)
+import           Data.Default
 import           Data.IORef                         (IORef, atomicModifyIORef',
                                                      readIORef, writeIORef)
 import qualified Data.Map.Strict                    as M
@@ -48,7 +51,8 @@ import           Data.Time                          (UTCTime)
 import           Dhall                              (FromDhall)
 import           System.Log.Logger                  (infoM)
 
-data RobotDriverHandle = forall c s. RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent)
+data RobotDriverHandle = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) =>
+                           RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent)
 
 data RobotDriverRequest
 
@@ -80,6 +84,7 @@ createRobotDriverThread :: (MonadIO m1,
                             ConfigStorage m1,
                             MonadPersistence m1,
                             QuoteStream m1,
+                            Default s,
                             FromJSON s,
                             ToJSON s,
                             FromDhall c,
@@ -109,6 +114,9 @@ createRobotDriverThread instDesc strDesc runner bigConf rConf rState = do
     passQuoteEvents eventQueue quoteQueue = do
       v <- readChan quoteQueue
       writeChan eventQueue (QuoteEvent v)
+
+onStrategyInstance :: RobotDriverHandle -> forall r. (forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyInstance c s -> r) -> r
+onStrategyInstance (RobotDriverHandle inst _ _ _) f = f inst
 
 data RobotEnv c s =
   RobotEnv

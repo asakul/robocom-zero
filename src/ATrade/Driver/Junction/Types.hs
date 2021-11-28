@@ -9,8 +9,10 @@ module ATrade.Driver.Junction.Types
     TickerConfig(..),
     StrategyInstanceDescriptor(..),
     StrategyInstance(..),
-    BigConfig(..)
-  ,StrategyDescriptorE(..)) where
+    BigConfig(..),
+    StrategyDescriptorE(..),
+    StrategyInstanceE(..)
+  ) where
 
 import           ATrade.RoboCom.Monad (EventCallback)
 import           ATrade.Types         (BarTimeframe (..), TickerId)
@@ -68,3 +70,5 @@ data StrategyInstance c s =
       strategyState         :: IORef s,
       strategyConfig        :: IORef c
     }
+
+data StrategyInstanceE = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyInstanceE (StrategyInstance c s)
