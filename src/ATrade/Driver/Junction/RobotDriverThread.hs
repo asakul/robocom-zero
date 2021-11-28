@@ -40,10 +40,11 @@ import           Control.Monad                      (forM_, forever, void)
 import           Control.Monad.IO.Class             (MonadIO, liftIO)
 import           Control.Monad.Reader               (MonadReader, ReaderT, asks)
 import           Data.Aeson                         (FromJSON, ToJSON)
-import           Data.IORef                         (IORef, readIORef,
-                                                     writeIORef)
+import           Data.IORef                         (IORef, atomicModifyIORef',
+                                                     readIORef, writeIORef)
 import qualified Data.Map.Strict                    as M
 import qualified Data.Text.Lazy                     as TL
+import           Data.Time                          (UTCTime)
 import           Dhall                              (FromDhall)
 import           System.Log.Logger                  (infoM)
 
@@ -114,6 +115,7 @@ data RobotEnv c s =
   {
     stateRef  :: IORef s,
     configRef :: IORef c,
+    timersRef :: IORef [UTCTime],
     broker    :: BrokerClientHandle,
     bars      :: IORef Bars
   }
@@ -132,7 +134,10 @@ instance MonadRobot (RobotM c s) c s where
 
   appendToLog = liftIO . infoM "Robot" . TL.unpack
 
-  setupTimer = undefined
+  setupTimer t = do
+    ref <- asks timersRef
+    liftIO $ atomicModifyIORef' ref (\s -> (t : s, ()))
+
   enqueueIOAction = undefined
   getConfig = asks configRef >>= liftIO . readIORef
   getState = asks stateRef >>= liftIO . readIORef

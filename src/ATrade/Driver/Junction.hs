@@ -151,7 +151,8 @@ junctionMain descriptors = do
                 bigConf <- loadConfig (configKey inst)
                 rConf <- liftIO $ newIORef (confStrategy bigConf)
                 rState <- loadState (stateKey inst) >>= liftIO . newIORef
-                let robotEnv = RobotEnv rState rConf bro barsMap
+                rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
+                let robotEnv = RobotEnv rState rConf rTimers bro barsMap
                 createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState
               Nothing   -> error "Unknown strategy"
   where
