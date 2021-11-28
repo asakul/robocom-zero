@@ -25,8 +25,7 @@ data StrategyDescriptor c s =
     StrategyDescriptor
     {
       baseStrategyName :: T.Text,
-      eventCallback    :: EventCallback c s,
-      defaultState     :: s
+      eventCallback    :: EventCallback c s
     }
 
 data StrategyDescriptorE = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyDescriptorE (StrategyDescriptor c s)
