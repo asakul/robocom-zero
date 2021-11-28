@@ -14,6 +14,9 @@ module ATrade.Driver.Junction
 import           ATrade.Broker.Client                        (BrokerClientHandle,
                                                               startBrokerClient,
                                                               stopBrokerClient)
+import           ATrade.Broker.Protocol                      (Notification (OrderNotification, TradeNotification),
+                                                              NotificationSqnum,
+                                                              getNotificationSqnum)
 import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (brokerEndpoint, brokerNotificationEndpoint, instances, qhpEndpoint, qtisEndpoint, redisSocket, robotsConfigsPath),
                                                               ProgramOptions (ProgramOptions, configPath))
 import           ATrade.Driver.Junction.QuoteStream          (QuoteStream (addSubscription, removeSubscription),
@@ -27,7 +30,8 @@ import           ATrade.Driver.Junction.RobotDriverThread    (RobotDriverHandle,
                                                               RobotEnv (..),
                                                               RobotM (..),
                                                               createRobotDriverThread,
-                                                              onStrategyInstance)
+                                                              onStrategyInstance,
+                                                              postNotificationEvent)
 import           ATrade.Driver.Junction.Types                (StrategyDescriptorE (StrategyDescriptorE),
                                                               StrategyInstance (strategyInstanceId),
                                                               StrategyInstanceDescriptor (..),
@@ -37,11 +41,14 @@ import           ATrade.Driver.Junction.Types                (StrategyDescriptor
 import           ATrade.Quotes.QHP                           (mkQHPHandle)
 import           ATrade.RoboCom.ConfigStorage                (ConfigStorage (loadConfig))
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
-import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams))
+import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams),
+                                                              OrderId,
+                                                              Trade (tradeOrderId))
 import           Control.Concurrent
 import           Control.Exception.Safe                      (MonadThrow,
                                                               bracket)
 import           Control.Monad                               (forM_, forever)
+import           Control.Monad.Extra                         (whenM)
 import           Control.Monad.IO.Class                      (MonadIO (liftIO))
 import           Control.Monad.Reader                        (MonadReader, ReaderT (runReaderT),
                                                               asks)
@@ -55,6 +62,8 @@ import           Data.IORef                                  (IORef,
                                                               newIORef,
                                                               readIORef)
 import qualified Data.Map.Strict                             as M
+import           Data.Set                                    (notMember)
+import qualified Data.Set                                    as S
 import qualified Data.Text                                   as T
 import           Data.Text.Encoding                          (encodeUtf8)
 import           Data.Text.IO                                (readFile)
@@ -145,9 +154,11 @@ junctionMain descriptors = do
   redis <- checkedConnect (defaultConnectInfo { connectPort = UnixSocket (T.unpack $ redisSocket cfg) })
   withContext $ \ctx -> do
     let downloaderEnv = DownloaderEnv (mkQHPHandle ctx (qhpEndpoint cfg)) ctx (qtisEndpoint cfg)
-    withBroker cfg ctx $ \bro ->
+    robotsMap <- newIORef M.empty
+    ordersMap <- newIORef M.empty
+    handledNotifications <- newIORef S.empty
+    withBroker cfg ctx robotsMap ordersMap handledNotifications $ \bro ->
       withQThread downloaderEnv barsMap cfg ctx $ \qt -> do
-        robotsMap <- newIORef M.empty
         let env =
               JunctionEnv
               {
@@ -191,13 +202,37 @@ junctionMain descriptors = do
     withJunction :: JunctionEnv -> JunctionM () -> IO ()
     withJunction env = (`runReaderT` env) . unJunctionM
 
-    withBroker cfg ctx f = bracket
+    handleBrokerNotification :: IORef (M.Map T.Text RobotDriverHandle) ->
+                                IORef (M.Map OrderId T.Text) ->
+                                IORef (S.Set NotificationSqnum) ->
+                                Notification ->
+                                IO ()
+    handleBrokerNotification robotsRef ordersMapRef handled notification =
+      whenM (notMember (getNotificationSqnum notification) <$> readIORef handled) $ do
+        robotsMap <- readIORef robotsRef
+        ordersMap <- readIORef ordersMapRef
+
+        case getNotificationTarget robotsMap ordersMap notification of
+          Just robot -> postNotificationEvent robot notification
+          Nothing    -> warningM "Junction" "Unknown order"
+
+        atomicModifyIORef' handled (\s -> (S.insert (getNotificationSqnum notification) s, ()))
+
+    getNotificationTarget :: M.Map T.Text RobotDriverHandle -> M.Map OrderId T.Text -> Notification -> Maybe RobotDriverHandle
+    getNotificationTarget robotsMap ordersMap notification = do
+      robotId <- M.lookup (notificationOrderId notification) ordersMap
+      M.lookup robotId robotsMap
+
+    notificationOrderId (OrderNotification _ oid _) = oid
+    notificationOrderId (TradeNotification _ trade) = tradeOrderId trade
+
+    withBroker cfg ctx robotsMap ordersMap handled f = bracket
       (startBrokerClient
         "broker"
         ctx
         (brokerEndpoint cfg)
         (brokerNotificationEndpoint cfg)
-        []
+        [handleBrokerNotification robotsMap ordersMap handled]
         (ClientSecurityParams -- TODO load certificates from file
          Nothing
          Nothing))

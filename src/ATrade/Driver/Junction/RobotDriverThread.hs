@@ -10,11 +10,12 @@ module ATrade.Driver.Junction.RobotDriverThread
   RobotEnv(..),
   RobotM(..),
   RobotDriverHandle,
-  onStrategyInstance
-  ) where
+  onStrategyInstance,
+  postNotificationEvent) where
 
 import           ATrade.Broker.Client               (BrokerClientHandle)
 import qualified ATrade.Broker.Client               as Bro
+import           ATrade.Broker.Protocol             (Notification (OrderNotification, TradeNotification))
 import           ATrade.Driver.Junction.QuoteStream (QuoteStream (addSubscription),
                                                      QuoteSubscription (QuoteSubscription))
 import           ATrade.Driver.Junction.Types       (BigConfig,
@@ -155,3 +156,11 @@ instance MonadRobot (RobotM c s) c s where
   getTicker tid tf = do
     b <- asks bars >>= liftIO . readIORef
     return $ M.lookup (BarSeriesId tid tf) b
+
+postNotificationEvent :: (MonadIO m) => RobotDriverHandle -> Notification -> m ()
+postNotificationEvent (RobotDriverHandle _ _ _ eventQueue) notification = liftIO $
+  case notification of
+    OrderNotification _ oid state -> writeChan eventQueue (OrderEvent oid state)
+    TradeNotification _ trade -> writeChan eventQueue (NewTradeEvent trade)
+
+
