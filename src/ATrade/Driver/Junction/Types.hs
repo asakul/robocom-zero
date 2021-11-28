@@ -20,6 +20,7 @@ import           Data.Aeson           (FromJSON (..), ToJSON (..))
 import           Data.Default         (Default)
 import           Data.IORef           (IORef)
 import qualified Data.Text            as T
+import           Data.Time            (UTCTime)
 import           Dhall                (FromDhall)
 import           GHC.Generics         (Generic)
 
@@ -68,7 +69,8 @@ data StrategyInstance c s =
       strategyInstanceId    :: T.Text,
       strategyEventCallback :: EventCallback c s,
       strategyState         :: IORef s,
-      strategyConfig        :: IORef c
+      strategyConfig        :: IORef c,
+      strategyTimers        :: IORef [UTCTime]
     }
 
 data StrategyInstanceE = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyInstanceE (StrategyInstance c s)

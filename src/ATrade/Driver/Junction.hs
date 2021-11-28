@@ -32,7 +32,8 @@ import           ATrade.Driver.Junction.Types                (StrategyDescriptor
                                                               StrategyInstance (strategyInstanceId),
                                                               StrategyInstanceDescriptor (..),
                                                               confStrategy,
-                                                              strategyState)
+                                                              strategyState,
+                                                              strategyTimers)
 import           ATrade.Quotes.QHP                           (mkQHPHandle)
 import           ATrade.RoboCom.ConfigStorage                (ConfigStorage (loadConfig))
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
@@ -171,6 +172,8 @@ junctionMain descriptors = do
     saveRobotState handle = onStrategyInstance handle $ \inst -> do
       currentState <- liftIO $ readIORef (strategyState inst)
       saveState currentState (strategyInstanceId inst)
+      currentTimers <- liftIO $ readIORef (strategyTimers inst)
+      saveState currentTimers (strategyInstanceId inst <> ":timers")
 
     startRobots cfg bro barsMap = forM_ (instances cfg) $ \inst ->
       case M.lookup (strategyBaseName inst) descriptors of
@@ -180,7 +183,7 @@ junctionMain descriptors = do
           rState <- loadState (stateKey inst) >>= liftIO . newIORef
           rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
           let robotEnv = RobotEnv rState rConf rTimers bro barsMap
-          robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState
+          robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState rTimers
           robotsMap' <- asks peRobots
           liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
         Nothing   -> error "Unknown strategy"

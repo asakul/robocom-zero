@@ -96,12 +96,13 @@ createRobotDriverThread :: (MonadIO m1,
   -> BigConfig c
   -> IORef c
   -> IORef s
+  -> IORef [UTCTime]
   -> m1 RobotDriverHandle
 
-createRobotDriverThread instDesc strDesc runner bigConf rConf rState = do
+createRobotDriverThread instDesc strDesc runner bigConf rConf rState rTimers = do
   eventQueue <- liftIO $ newBoundedChan 2000
 
-  let inst = StrategyInstance (strategyId instDesc) (eventCallback strDesc) rState rConf
+  let inst = StrategyInstance (strategyId instDesc) (eventCallback strDesc) rState rConf rTimers
 
   quoteQueue <- liftIO $ newBoundedChan 2000
   forM_ (confTickers bigConf) (\x -> addSubscription (QuoteSubscription (tickerId x) (timeframe x)) quoteQueue)
