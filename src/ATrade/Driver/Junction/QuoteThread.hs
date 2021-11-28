@@ -58,7 +58,7 @@ import qualified Data.Text                                   as T
 import           Data.Time                                   (addUTCTime,
                                                               getCurrentTime)
 import           System.ZMQ4                                 (Context)
-import           System.ZMQ4.ZAP                             (CurveCertificate)
+import           System.ZMQ4.ZAP                             (loadCertificateFromFile)
 
 
 data QuoteThreadHandle = QuoteThreadHandle ThreadId ThreadId QuoteThreadEnv
@@ -80,14 +80,13 @@ startQuoteThread :: (MonadIO m,
   IORef Bars ->
   Context ->
   T.Text ->
-  Maybe CurveCertificate ->
-  Maybe CurveCertificate ->
+  ClientSecurityParams ->
   (m1 () -> IO ()) ->
   m QuoteThreadHandle
-startQuoteThread barsRef ctx ep clientCert serverCert downloadThreadRunner = do
+startQuoteThread barsRef ctx ep secparams downloadThreadRunner = do
   chan <- liftIO $ newBoundedChan 2000
   dChan <- liftIO $ newBoundedChan 2000
-  qsc <- liftIO $ startQuoteSourceClient chan [] ctx ep (ClientSecurityParams clientCert serverCert)
+  qsc <- liftIO $ startQuoteSourceClient chan [] ctx ep secparams
   env <- liftIO $ QuoteThreadEnv barsRef <$> newIORef HM.empty <*> pure qsc <*> newIORef M.empty <*> pure dChan
   tid <- liftIO . forkIO $ quoteThread env chan
   downloaderTid <- liftIO . forkIO $ downloadThreadRunner (downloaderThread env dChan)
@@ -186,16 +185,28 @@ instance TickerInfoProvider DownloaderM where
                      (tiTickSize ti)
 
 withQThread :: DownloaderEnv -> IORef Bars -> ProgramConfiguration -> Context -> (QuoteThreadHandle -> IO ()) -> IO ()
-withQThread env barsMap cfg ctx =
+withQThread env barsMap cfg ctx f = do
+    securityParameters <- loadSecurityParameters
     bracket
-    (startQuoteThread
-        barsMap
-        ctx
-        (quotesourceEndpoint cfg)
-        Nothing
-        Nothing
-        (runDownloaderM env))
-    stopQuoteThread
+      (startQuoteThread
+          barsMap
+          ctx
+          (quotesourceEndpoint cfg)
+          securityParameters
+          (runDownloaderM env))
+      stopQuoteThread f
+  where
+    loadSecurityParameters :: IO ClientSecurityParams
+    loadSecurityParameters =
+      case (quotesourceClientCert cfg, quotesourceServerCert cfg) of
+        (Just clientCertPath, Just serverCertPath) -> do
+          eClientCert <- loadCertificateFromFile clientCertPath
+          eServerCert <- loadCertificateFromFile serverCertPath
+          case (eClientCert, eServerCert) of
+            (Right clientCert, Right serverCert) -> return $ ClientSecurityParams (Just clientCert) (Just serverCert)
+            (_, _) -> return $ ClientSecurityParams Nothing Nothing
+
+        _ -> return $ ClientSecurityParams Nothing Nothing
 
 runDownloaderM :: DownloaderEnv -> DownloaderM () -> IO ()
 runDownloaderM env = (`runReaderT` env) . unDownloaderM
