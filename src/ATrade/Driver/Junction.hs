@@ -17,7 +17,7 @@ import           ATrade.Broker.Client                        (BrokerClientHandle
 import           ATrade.Broker.Protocol                      (Notification (OrderNotification, TradeNotification),
                                                               NotificationSqnum,
                                                               getNotificationSqnum)
-import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (brokerEndpoint, brokerNotificationEndpoint, instances, qhpEndpoint, qtisEndpoint, redisSocket, robotsConfigsPath),
+import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (brokerClientCert, brokerEndpoint, brokerNotificationEndpoint, brokerServerCert, instances, qhpEndpoint, qtisEndpoint, redisSocket, robotsConfigsPath),
                                                               ProgramOptions (ProgramOptions, configPath))
 import           ATrade.Driver.Junction.QuoteStream          (QuoteStream (addSubscription, removeSubscription),
                                                               QuoteSubscription (QuoteSubscription),
@@ -44,7 +44,7 @@ import           ATrade.RoboCom.Persistence                  (MonadPersistence (
 import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams),
                                                               OrderId,
                                                               Trade (tradeOrderId))
-import           Control.Concurrent
+import           Control.Concurrent                          (threadDelay)
 import           Control.Exception.Safe                      (MonadThrow,
                                                               bracket)
 import           Control.Monad                               (forM_, forever)
@@ -87,6 +87,7 @@ import           Options.Applicative                         (Parser,
 import           Prelude                                     hiding (readFile)
 import           System.Log.Logger                           (warningM)
 import           System.ZMQ4                                 (withContext)
+import           System.ZMQ4.ZAP                             (loadCertificateFromFile)
 
 data JunctionEnv =
   JunctionEnv
@@ -226,17 +227,29 @@ junctionMain descriptors = do
     notificationOrderId (OrderNotification _ oid _) = oid
     notificationOrderId (TradeNotification _ trade) = tradeOrderId trade
 
-    withBroker cfg ctx robotsMap ordersMap handled f = bracket
-      (startBrokerClient
-        "broker"
-        ctx
-        (brokerEndpoint cfg)
-        (brokerNotificationEndpoint cfg)
-        [handleBrokerNotification robotsMap ordersMap handled]
-        (ClientSecurityParams -- TODO load certificates from file
-         Nothing
-         Nothing))
-      stopBrokerClient f
+    withBroker cfg ctx robotsMap ordersMap handled f = do
+      securityParameters <- loadBrokerSecurityParameters cfg
+      bracket
+        (startBrokerClient
+          "broker"
+          ctx
+          (brokerEndpoint cfg)
+          (brokerNotificationEndpoint cfg)
+          [handleBrokerNotification robotsMap ordersMap handled]
+          securityParameters)
+        stopBrokerClient f
+
+    loadBrokerSecurityParameters cfg =
+      case (brokerClientCert cfg, brokerServerCert cfg) of
+        (Just clientCertPath, Just serverCertPath) -> do
+          eClientCert <- loadCertificateFromFile clientCertPath
+          eServerCert <- loadCertificateFromFile serverCertPath
+          case (eClientCert, eServerCert) of
+            (Right clientCert, Right serverCert) -> return $ ClientSecurityParams (Just clientCert) (Just serverCert)
+            (_, _) -> return $ ClientSecurityParams Nothing Nothing
+
+        _ -> return $ ClientSecurityParams Nothing Nothing
+
     parseOptions = execParser options
     options = info (optionsParser <**> helper)
       (fullDesc <>
