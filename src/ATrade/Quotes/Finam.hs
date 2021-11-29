@@ -18,10 +18,12 @@ module ATrade.Quotes.Finam (
 ) where
 
 import           ATrade.Types
+import           Colog                                (HasLog, Msg)
 import           Control.Error.Util
 import           Control.Exception
 import           Control.Lens
 import           Control.Monad
+import           Control.Monad.IO.Class               (MonadIO)
 import qualified Data.ByteString                      as B
 import qualified Data.ByteString.Char8                as B8
 import qualified Data.ByteString.Lazy                 as BL
@@ -37,7 +39,6 @@ import           Data.Time.Format
 import qualified Data.Vector                          as V
 import           Network.Wreq
 import           Safe
-import           System.Log.Logger
 import           Text.Parsec
 import           Text.ParserCombinators.Parsec.Number
 
@@ -209,7 +210,7 @@ instance FromRecord Row where
         Just dt -> return dt
         Nothing -> fail "Unable to parse date/time"
 
-downloadAndParseQuotes :: RequestParams -> IO (Maybe [Row])
+downloadAndParseQuotes :: (MonadIO m, HasLog env Msg m)RequestParams -> IO (Maybe [Row])
 downloadAndParseQuotes requestParams = downloadAndParseQuotes' 3
   where
     downloadAndParseQuotes' iter = do

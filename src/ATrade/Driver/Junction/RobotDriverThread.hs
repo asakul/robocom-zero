@@ -1,7 +1,9 @@
 {-# LANGUAGE ExistentialQuantification  #-}
+{-# LANGUAGE FlexibleContexts           #-}
 {-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE MultiParamTypeClasses      #-}
+{-# LANGUAGE OverloadedStrings          #-}
 {-# LANGUAGE RankNTypes                 #-}
 
 module ATrade.Driver.Junction.RobotDriverThread
@@ -26,6 +28,7 @@ import           ATrade.Driver.Junction.Types       (BigConfig,
                                                      eventCallback, stateKey,
                                                      strategyId, tickerId,
                                                      timeframe)
+import           ATrade.Logging                     (Message, logInfo)
 import           ATrade.QuoteSource.Client          (QuoteData (..))
 import           ATrade.RoboCom.ConfigStorage       (ConfigStorage)
 import           ATrade.RoboCom.Monad               (Event (NewBar, NewTick, NewTrade, OrderUpdate),
@@ -34,6 +37,8 @@ import           ATrade.RoboCom.Persistence         (MonadPersistence)
 import           ATrade.RoboCom.Types               (BarSeriesId (BarSeriesId),
                                                      Bars)
 import           ATrade.Types                       (OrderId, OrderState, Trade)
+import           Colog                              (HasLog (getLogAction, setLogAction),
+                                                     LogAction)
 import           Control.Concurrent                 (ThreadId, forkIO)
 import           Control.Concurrent.BoundedChan     (BoundedChan,
                                                      newBoundedChan, readChan,
@@ -50,7 +55,6 @@ import qualified Data.Map.Strict                    as M
 import qualified Data.Text.Lazy                     as TL
 import           Data.Time                          (UTCTime)
 import           Dhall                              (FromDhall)
-import           System.Log.Logger                  (infoM)
 
 data RobotDriverHandle = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) =>
                            RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent)
@@ -127,11 +131,16 @@ data RobotEnv c s =
     configRef :: IORef c,
     timersRef :: IORef [UTCTime],
     broker    :: BrokerClientHandle,
-    bars      :: IORef Bars
+    bars      :: IORef Bars,
+    logAction :: LogAction (RobotM c s) Message
   }
 
 newtype RobotM c s a = RobotM { unRobotM :: ReaderT (RobotEnv c s) IO a }
   deriving (Functor, Applicative, Monad, MonadReader (RobotEnv c s), MonadIO, MonadThrow)
+
+instance HasLog (RobotEnv c s) Message (RobotM c s) where
+  getLogAction = logAction
+  setLogAction a e = e { logAction = a }
 
 instance MonadRobot (RobotM c s) c s where
   submitOrder order = do
@@ -142,7 +151,7 @@ instance MonadRobot (RobotM c s) c s where
     bro <- asks broker
     liftIO $ void $ Bro.cancelOrder bro oid
 
-  appendToLog = liftIO . infoM "Robot" . TL.unpack
+  appendToLog = logInfo "RobotM" . TL.toStrict -- TODO get instance id from environment and better use it instead of generic 'RobotM'
 
   setupTimer t = do
     ref <- asks timersRef

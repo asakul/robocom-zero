@@ -1,4 +1,6 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE QuasiQuotes       #-}
 
 module ATrade.Quotes.QHP (
   Period(..),
@@ -9,18 +11,20 @@ module ATrade.Quotes.QHP (
   ) where
 
 import           ATrade.Exceptions
+import           ATrade.Logging          (Message, logInfo)
 import           ATrade.Types
-import           Control.Exception.Safe (MonadThrow, throw)
-import           Control.Monad.IO.Class (MonadIO, liftIO)
+import           Colog                   (WithLog)
+import           Control.Exception.Safe  (MonadThrow, throw)
+import           Control.Monad.IO.Class  (MonadIO, liftIO)
 import           Data.Aeson
 import           Data.Binary.Get
-import qualified Data.ByteString.Lazy   as BL
-import qualified Data.Text              as T
+import qualified Data.ByteString.Lazy    as BL
+import qualified Data.Text               as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 import           Data.Time.Clock.POSIX
 import           Data.Time.Format
-import           System.Log.Logger
+import           Language.Haskell.Printf (t)
 import           System.ZMQ4
 
 data Period =
@@ -53,10 +57,10 @@ data QHPHandle = QHPHandle
 mkQHPHandle :: Context -> T.Text -> QHPHandle
 mkQHPHandle = QHPHandle
 
-requestHistoryFromQHP :: (MonadThrow m, MonadIO m) => QHPHandle -> TickerId -> BarTimeframe -> UTCTime -> UTCTime -> m [Bar]
+requestHistoryFromQHP :: (WithLog env Message m, MonadThrow m, MonadIO m) => QHPHandle -> TickerId -> BarTimeframe -> UTCTime -> UTCTime -> m [Bar]
 requestHistoryFromQHP qhp tickerId timeframe fromTime toTime =
   case parseQHPPeriod (unBarTimeframe timeframe) of
-    Just tf -> liftIO $ getQuotes (qhpContext qhp) (params tf)
+    Just tf -> getQuotes (qhpContext qhp) (params tf)
     _       -> throw $ BadParams "QHP: Unable to parse timeframe"
   where
     params tf = RequestParams
@@ -96,10 +100,10 @@ instance ToJSON RequestParams where
     "to" .=  printDatetime (UTCTime (endDate p) 0),
     "timeframe" .= show (period p) ]
 
-getQuotes :: Context -> RequestParams -> IO [Bar]
-getQuotes ctx params =
-  withSocket ctx Req $ \sock -> do
-    debugM "QHP" $ "Connecting to ep: " ++ show (endpoint params)
+getQuotes :: (WithLog env Message m, MonadIO m) => Context -> RequestParams -> m [Bar]
+getQuotes ctx params = do
+  logInfo "QHP" $ "Connecting to ep: " <> endpoint params
+  liftIO $ withSocket ctx Req $ \sock -> do
     connect sock $ (T.unpack . endpoint) params
     send sock [] (BL.toStrict $ encode params)
     response <- receiveMulti sock

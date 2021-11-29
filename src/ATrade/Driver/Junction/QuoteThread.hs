@@ -1,7 +1,11 @@
 {-# LANGUAGE DeriveGeneric              #-}
+{-# LANGUAGE FlexibleContexts           #-}
+{-# LANGUAGE FlexibleInstances          #-}
 {-# LANGUAGE GeneralizedNewtypeDeriving #-}
 {-# LANGUAGE LambdaCase                 #-}
+{-# LANGUAGE MultiParamTypeClasses      #-}
 {-# LANGUAGE ScopedTypeVariables        #-}
+{-# LANGUAGE TypeSynonymInstances       #-}
 
 module ATrade.Driver.Junction.QuoteThread
  (
@@ -17,6 +21,7 @@ module ATrade.Driver.Junction.QuoteThread
 
 import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (..))
 import           ATrade.Driver.Junction.QuoteStream          (QuoteSubscription (..))
+import           ATrade.Logging                              (Message)
 import           ATrade.Quotes.HistoryProvider               (HistoryProvider (..))
 import           ATrade.Quotes.QHP                           (QHPHandle, requestHistoryFromQHP)
 import           ATrade.Quotes.QTIS                          (TickerInfo (tiLotSize, tiTickSize, tiTicker),
@@ -36,13 +41,17 @@ import           ATrade.Types                                (BarTimeframe (BarT
                                                               ClientSecurityParams (ClientSecurityParams),
                                                               Tick (security),
                                                               TickerId)
+import           Colog                                       (HasLog (getLogAction, setLogAction),
+                                                              LogAction,
+                                                              WithLog)
 import           Control.Concurrent                          (ThreadId, forkIO,
                                                               killThread)
 import           Control.Concurrent.BoundedChan              (BoundedChan,
                                                               newBoundedChan,
                                                               readChan,
                                                               writeChan)
-import           Control.Exception.Safe                      (MonadThrow,
+import           Control.Exception.Safe                      (MonadMask,
+                                                              MonadThrow,
                                                               bracket)
 import           Control.Monad                               (forM, forever)
 import           Control.Monad.Reader                        (MonadIO (liftIO), ReaderT (runReaderT),
@@ -75,6 +84,7 @@ data QuoteThreadEnv =
 
 startQuoteThread :: (MonadIO m,
                      MonadIO m1,
+                     WithLog DownloaderEnv Message m1,
                      HistoryProvider m1,
                      TickerInfoProvider m1) =>
   IORef Bars ->
@@ -161,11 +171,16 @@ data DownloaderEnv =
   {
     qhp                    :: QHPHandle,
     downloaderContext      :: Context,
-    downloaderQtisEndpoint :: T.Text
+    downloaderQtisEndpoint :: T.Text,
+    logAction              :: LogAction DownloaderM Message
   }
 
 newtype DownloaderM a = DownloaderM { unDownloaderM :: ReaderT DownloaderEnv IO a }
   deriving (Functor, Applicative, Monad, MonadReader DownloaderEnv, MonadIO, MonadThrow)
+
+instance HasLog DownloaderEnv Message DownloaderM where
+  getLogAction = logAction
+  setLogAction a e = e { logAction = a }
 
 instance HistoryProvider DownloaderM where
   getHistory tid tf from to = do
@@ -176,7 +191,7 @@ instance TickerInfoProvider DownloaderM where
   getInstrumentParameters tickers = do
     ctx <- asks downloaderContext
     ep <- asks downloaderQtisEndpoint
-    tis <- liftIO $ forM tickers (qtisGetTickersInfo ctx ep)
+    tis <- forM tickers (qtisGetTickersInfo ctx ep)
     pure $ convert `fmap` tis
     where
       convert ti = InstrumentParameters
@@ -196,7 +211,6 @@ withQThread env barsMap cfg ctx f = do
           (runDownloaderM env))
       stopQuoteThread f
   where
-    loadSecurityParameters :: IO ClientSecurityParams
     loadSecurityParameters =
       case (quotesourceClientCert cfg, quotesourceServerCert cfg) of
         (Just clientCertPath, Just serverCertPath) -> do

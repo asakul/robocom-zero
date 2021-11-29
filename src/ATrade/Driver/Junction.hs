@@ -38,12 +38,21 @@ import           ATrade.Driver.Junction.Types                (StrategyDescriptor
                                                               confStrategy,
                                                               strategyState,
                                                               strategyTimers)
+import           ATrade.Logging                              (Message,
+                                                              Severity (Info),
+                                                              fmtMessage,
+                                                              logWarning,
+                                                              logWith)
 import           ATrade.Quotes.QHP                           (mkQHPHandle)
 import           ATrade.RoboCom.ConfigStorage                (ConfigStorage (loadConfig))
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
 import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams),
                                                               OrderId,
                                                               Trade (tradeOrderId))
+import           Colog                                       (HasLog (getLogAction, setLogAction),
+                                                              LogAction,
+                                                              logTextStdout,
+                                                              (>$<))
 import           Control.Concurrent                          (threadDelay)
 import           Control.Exception.Safe                      (MonadThrow,
                                                               bracket)
@@ -84,8 +93,8 @@ import           Options.Applicative                         (Parser,
                                                               metavar, progDesc,
                                                               short, strOption,
                                                               (<**>))
-import           Prelude                                     hiding (readFile)
-import           System.Log.Logger                           (warningM)
+import           Prelude                                     hiding (log,
+                                                              readFile)
 import           System.ZMQ4                                 (withContext)
 import           System.ZMQ4.ZAP                             (loadCertificateFromFile)
 
@@ -96,11 +105,16 @@ data JunctionEnv =
     peConfigPath  :: FilePath,
     peQuoteThread :: QuoteThreadHandle,
     peBroker      :: BrokerClientHandle,
-    peRobots      :: IORef (M.Map T.Text RobotDriverHandle)
+    peRobots      :: IORef (M.Map T.Text RobotDriverHandle),
+    peLogAction   :: LogAction JunctionM Message
   }
 
 newtype JunctionM a = JunctionM { unJunctionM :: ReaderT JunctionEnv IO a }
   deriving (Functor, Applicative, Monad, MonadReader JunctionEnv, MonadIO, MonadThrow)
+
+instance HasLog JunctionEnv Message JunctionM where
+  getLogAction = peLogAction
+  setLogAction a e = e { peLogAction = a }
 
 instance ConfigStorage JunctionM where
   loadConfig key = do
@@ -115,7 +129,7 @@ instance MonadPersistence JunctionM where
     res <- liftIO $ runRedis conn $ mset [(encodeUtf8 key, BL.toStrict $ encode newState),
                                  (encodeUtf8 (key <> ":last_store") , encodeUtf8 . T.pack . show $ now)]
     case res of
-      Left _  -> liftIO $ warningM "main" "Unable to save state"
+      Left _  -> logWarning "Junction " "Unable to save state"
       Right _ -> return ()
 
   loadState key = do
@@ -124,17 +138,17 @@ instance MonadPersistence JunctionM where
     -- TODO: just chain eithers
     case res of
       Left _ -> do
-        liftIO $ warningM "main" "Unable to load state"
+        logWarning "Junction" "Unable to load state"
         return def
       Right maybeRawState ->
         case maybeRawState of
           Just rawState -> case eitherDecode $ BL.fromStrict rawState of
             Left _ -> do
-              liftIO $ warningM "main" "Unable to decode state"
+              logWarning "Junction" "Unable to decode state"
               return def
             Right decodedState -> return decodedState
           Nothing -> do
-            liftIO $ warningM "main" "Unable to decode state"
+            logWarning "Junction" "Unable to decode state"
             return def
 
 instance QuoteStream JunctionM where
@@ -148,18 +162,25 @@ junctionMain :: M.Map T.Text StrategyDescriptorE -> IO ()
 junctionMain descriptors = do
   opts <- parseOptions
 
+  let bootstrapLogAction = fmtMessage >$< logTextStdout
+  let log = logWith bootstrapLogAction
+
+  log Info "Junction" $ "Reading config from: " <> (T.pack . show) (configPath opts)
+
   cfg <- readFile (configPath opts) >>= input auto
 
   barsMap <- newIORef M.empty
 
   redis <- checkedConnect (defaultConnectInfo { connectPort = UnixSocket (T.unpack $ redisSocket cfg) })
   withContext $ \ctx -> do
-    let downloaderEnv = DownloaderEnv (mkQHPHandle ctx (qhpEndpoint cfg)) ctx (qtisEndpoint cfg)
+    let downloaderLogAction = fmtMessage >$< logTextStdout
+    let downloaderEnv = DownloaderEnv (mkQHPHandle ctx (qhpEndpoint cfg)) ctx (qtisEndpoint cfg) downloaderLogAction
     robotsMap <- newIORef M.empty
     ordersMap <- newIORef M.empty
     handledNotifications <- newIORef S.empty
     withBroker cfg ctx robotsMap ordersMap handledNotifications $ \bro ->
       withQThread downloaderEnv barsMap cfg ctx $ \qt -> do
+        let junctionLogAction = fmtMessage >$< logTextStdout
         let env =
               JunctionEnv
               {
@@ -167,7 +188,8 @@ junctionMain descriptors = do
                 peConfigPath = robotsConfigsPath cfg,
                 peQuoteThread = qt,
                 peBroker = bro,
-                peRobots = robotsMap
+                peRobots = robotsMap,
+                peLogAction = junctionLogAction
               }
         withJunction env $ do
           startRobots cfg bro barsMap
@@ -194,7 +216,8 @@ junctionMain descriptors = do
           rConf <- liftIO $ newIORef (confStrategy bigConf)
           rState <- loadState (stateKey inst) >>= liftIO . newIORef
           rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
-          let robotEnv = RobotEnv rState rConf rTimers bro barsMap
+          let robotLogAction = fmtMessage >$< logTextStdout
+          let robotEnv = RobotEnv rState rConf rTimers bro barsMap robotLogAction
           robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState rTimers
           robotsMap' <- asks peRobots
           liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
@@ -215,7 +238,7 @@ junctionMain descriptors = do
 
         case getNotificationTarget robotsMap ordersMap notification of
           Just robot -> postNotificationEvent robot notification
-          Nothing    -> warningM "Junction" "Unknown order"
+          Nothing    -> return () --logWarning "Junction" "Unknown order" -- TODO log
 
         atomicModifyIORef' handled (\s -> (S.insert (getNotificationSqnum notification) s, ()))
 

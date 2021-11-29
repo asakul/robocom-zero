@@ -24,7 +24,6 @@ library
                      , ATrade.RoboCom.Types
                      , ATrade.RoboCom.Utils
                      , ATrade.Quotes
-                     , ATrade.Quotes.Finam
                      , ATrade.Quotes.QHP
                      , ATrade.Quotes.QTIS
 --                     , ATrade.Driver.Real
@@ -41,7 +40,7 @@ library
                      , ATrade.Quotes.TickerInfoProvider
   other-modules:       Paths_robocom_zero
   build-depends:       base >= 4.7 && < 5
-                     , libatrade >= 0.10.0.0 && < 0.11.0.0
+                     , libatrade >= 0.11.0.0 && < 0.12.0.0
                      , text
                      , text-icu
                      , errors
@@ -53,7 +52,6 @@ library
                      , vector
                      , wreq
                      , safe
-                     , hslogger
                      , parsec
                      , parsec-numbers
                      , aeson
@@ -86,6 +84,7 @@ library
                      , async
                      , dhall
                      , extra
+                     , co-log
                      
   default-language:    Haskell2010
   other-modules:       ATrade.Exceptions
