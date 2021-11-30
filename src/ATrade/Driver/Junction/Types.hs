@@ -21,7 +21,7 @@ import           Data.Default         (Default)
 import           Data.IORef           (IORef)
 import qualified Data.Text            as T
 import           Data.Time            (UTCTime)
-import           Dhall                (FromDhall)
+import           Dhall                (FromDhall, autoWith, natural)
 import           GHC.Generics         (Generic)
 
 data StrategyDescriptor c s =
@@ -41,7 +41,9 @@ data TickerConfig =
   }
   deriving (Generic)
 
-instance FromDhall BarTimeframe
+instance FromDhall BarTimeframe where
+  autoWith _ = BarTimeframe . fromIntegral <$> natural
+
 instance FromDhall TickerConfig
 
 data BigConfig c = BigConfig {
