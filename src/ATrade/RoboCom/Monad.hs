@@ -34,7 +34,7 @@ import           Language.Haskell.Printf
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
-  submitOrder :: Order -> m ()
+  submitOrder :: Order -> m OrderId
   cancelOrder :: OrderId -> m ()
   appendToLog :: TL.Text -> m ()
   setupTimer :: UTCTime -> m ()

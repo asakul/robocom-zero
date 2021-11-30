@@ -65,7 +65,8 @@ module ATrade.RoboCom.Positions
   setStopLoss,
   setLimitStopLoss,
   setTakeProfit,
-  setStopLossAndTakeProfit
+  setStopLossAndTakeProfit,
+  handlePositions
 ) where
 
 import           GHC.Generics
@@ -191,9 +192,9 @@ dispatchPosition event pos = case posState pos of
       if orderDeadline (posSubmissionDeadline pos) lastTs
         then return $ pos { posState = PositionCancelled } -- TODO call TimeoutHandler if present
         else case event of
-          OrderSubmitted order ->
-            return $ if order `orderCorrespondsTo` pendingOrder
-              then pos { posCurrentOrder = Just order,
+          OrderUpdate oid Submitted -> do
+            return $ if orderId pendingOrder == oid
+              then pos { posCurrentOrder = Just pendingOrder,
                 posState = PositionWaitingOpen,
                 posSubmissionDeadline = Nothing }
               else pos
@@ -206,7 +207,6 @@ dispatchPosition event pos = case posState pos of
           then
             if posBalance pos == 0
               then do
-                appendToLog $ [t|"In PositionWaitingOpen: execution timeout: %?/%?"|] (posExecutionDeadline pos) lastTs
                 cancelOrder $ orderId order
                 return $ pos { posState = PositionWaitingPendingCancellation, posNextState = Just PositionCancelled }
               else do
@@ -271,8 +271,11 @@ dispatchPosition event pos = case posState pos of
             (OrderUpdate _ newstate, Just _, Just (PositionWaitingCloseSubmission nextOrder)) ->
               if newstate == Cancelled
                 then do
-                  submitOrder nextOrder
-                  return pos { posState = PositionWaitingCloseSubmission nextOrder, posSubmissionDeadline = Just (10 `addUTCTime` lastTs), posExecutionDeadline = Nothing }
+                  oid <- submitOrder nextOrder
+                  return pos
+                           { posState = PositionWaitingCloseSubmission nextOrder { orderId = oid },
+                             posSubmissionDeadline = Just (10 `addUTCTime` lastTs),
+                             posExecutionDeadline = Nothing }
                 else return pos
             (OrderUpdate _ newstate, Just _, Just PositionCancelled) ->
               if newstate == Cancelled
@@ -292,9 +295,9 @@ dispatchPosition event pos = case posState pos of
             Nothing    -> doNothing
           return $ pos { posCurrentOrder = Nothing, posState = PositionOpen, posSubmissionDeadline = Nothing } -- TODO call TimeoutHandler if present
         else case event of
-          OrderSubmitted order ->
-            return $ if order `orderCorrespondsTo` pendingOrder
-              then pos { posCurrentOrder = Just order,
+          OrderUpdate oid Submitted ->
+            return $ if orderId pendingOrder == oid
+              then pos { posCurrentOrder = Just pendingOrder,
                 posState = PositionWaitingClose,
                 posSubmissionDeadline = Nothing }
               else pos
@@ -464,8 +467,8 @@ enterAtMarket operationSignalName operation = do
 enterAtMarketWithParams :: (StateHasPositions s, ParamsHasMainTicker c, MonadRobot m c s) => T.Text -> Int -> SignalId -> Operation -> m Position
 enterAtMarketWithParams account quantity signalId operation = do
   tickerId <- snd . mainTicker <$> getConfig
-  submitOrder $ order tickerId
-  newPosition (order tickerId) account tickerId operation quantity 20
+  oid <- submitOrder $ order tickerId
+  newPosition ((order tickerId) { orderId = oid }) account tickerId operation quantity 20
   where
    order tickerId = mkOrder {
     orderAccountId = account,
@@ -508,9 +511,9 @@ enterAtLimitForTicker tickerId timeToCancel operationSignalName price operation 
 enterAtLimitForTickerWithParams :: (StateHasPositions s, MonadRobot m c s) => TickerId -> NominalDiffTime -> T.Text -> Int -> SignalId -> Price -> Operation -> m Position
 enterAtLimitForTickerWithParams tickerId timeToCancel account quantity signalId price operation = do
   lastTs <- view seLastTimestamp <$> getEnvironment
-  submitOrder order
+  oid <- submitOrder order
   appendToLog $ [t|enterAtLimit: %?, deadline: %?|] tickerId (timeToCancel `addUTCTime` lastTs)
-  newPosition order account tickerId operation quantity 20 >>=
+  newPosition (order {orderId = oid}) account tickerId operation quantity 20 >>=
     modifyPosition (\p -> p { posExecutionDeadline = Just $ timeToCancel `addUTCTime` lastTs })
   where
     order = mkOrder {
@@ -554,10 +557,10 @@ exitAtMarket position operationSignalName = do
           posExecutionDeadline = Nothing }) position
 
     Nothing -> do
-      submitOrder (closeOrder inst)
+      oid <- submitOrder (closeOrder inst)
       modifyPosition (\pos ->
         pos { posCurrentOrder = Nothing,
-          posState = PositionWaitingCloseSubmission (closeOrder inst),
+          posState = PositionWaitingCloseSubmission (closeOrder inst) { orderId = oid },
           posNextState = Just PositionClosed,
           posSubmissionDeadline = Just $ 10 `addUTCTime` lastTs,
           posExecutionDeadline = Nothing }) position
@@ -578,11 +581,11 @@ exitAtLimit timeToCancel price position operationSignalName = do
   case posCurrentOrder position of
     Just order -> cancelOrder (orderId order)
     Nothing    -> doNothing
-  submitOrder (closeOrder inst)
+  oid <- submitOrder (closeOrder inst)
   appendToLog $ [t|exitAtLimit: %?, deadline: %?|] (posTicker position) (timeToCancel `addUTCTime` lastTs)
   modifyPosition (\pos ->
     pos { posCurrentOrder = Nothing,
-      posState = PositionWaitingCloseSubmission (closeOrder inst),
+      posState = PositionWaitingCloseSubmission (closeOrder inst) { orderId = oid },
       posNextState = Just PositionClosed,
       posSubmissionDeadline = Just $ 10 `addUTCTime` lastTs,
       posExecutionDeadline = Just $ timeToCancel `addUTCTime` lastTs }) position
