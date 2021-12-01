@@ -19,7 +19,7 @@ import           ATrade.Broker.Protocol                      (Notification (Orde
                                                               getNotificationSqnum)
 import           ATrade.Driver.Junction.BrokerService        (BrokerService,
                                                               mkBrokerService)
-import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (ProgramConfiguration, brokerClientCert, brokerEndpoint, brokerNotificationEndpoint, brokerServerCert, instances, qhpEndpoint, qtisEndpoint, redisSocket, robotsConfigsPath),
+import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (..),
                                                               ProgramOptions (ProgramOptions, configPath))
 import           ATrade.Driver.Junction.QuoteStream          (QuoteStream (addSubscription, removeSubscription),
                                                               QuoteSubscription (QuoteSubscription),
@@ -28,8 +28,7 @@ import           ATrade.Driver.Junction.QuoteThread          (DownloaderEnv (Dow
                                                               QuoteThreadHandle,
                                                               withQThread)
 import qualified ATrade.Driver.Junction.QuoteThread          as QT
-import           ATrade.Driver.Junction.RobotDriverThread    (RobotDriverHandle,
-                                                              RobotEnv (..),
+import           ATrade.Driver.Junction.RobotDriverThread    (RobotDriverHandle, RobotEnv (RobotEnv),
                                                               RobotM (..),
                                                               createRobotDriverThread,
                                                               onStrategyInstance,
@@ -40,7 +39,7 @@ import           ATrade.Driver.Junction.Types                (StrategyDescriptor
                                                               confStrategy,
                                                               strategyState,
                                                               strategyTimers)
-import           ATrade.Logging                              (Message, Severity (Debug, Error, Info, Trace, Warning),
+import           ATrade.Logging                              (Message, Severity (Debug, Info, Trace, Warning),
                                                               fmtMessage,
                                                               logWarning,
                                                               logWith)
@@ -50,7 +49,7 @@ import           ATrade.RoboCom.Monad                        (StrategyEnvironmen
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
 import           ATrade.RoboCom.Types                        (Bars)
 import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams),
-                                                              Order, OrderId,
+                                                              OrderId,
                                                               Trade (tradeOrderId))
 import           Colog                                       (HasLog (getLogAction, setLogAction),
                                                               LogAction,
