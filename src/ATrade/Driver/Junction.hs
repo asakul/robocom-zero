@@ -15,9 +15,10 @@ import           ATrade.Broker.Client                        (BrokerClientHandle
                                                               startBrokerClient,
                                                               stopBrokerClient)
 import           ATrade.Broker.Protocol                      (Notification (OrderNotification, TradeNotification),
-                                                              NotificationSqnum,
+                                                              NotificationSqnum (unNotificationSqnum),
                                                               getNotificationSqnum)
 import           ATrade.Driver.Junction.BrokerService        (BrokerService,
+                                                              getNotifications,
                                                               mkBrokerService)
 import           ATrade.Driver.Junction.ProgramConfiguration (ProgramConfiguration (..),
                                                               ProgramOptions (ProgramOptions, configPath))
@@ -214,8 +215,10 @@ junctionMain descriptors = do
           withJunction env $ do
             startRobots h cfg barsMap broService
             forever $ do
+              notifications <- liftIO $ getNotifications broService
+              forM_ notifications (liftIO . handleBrokerNotification robotsMap ordersMap handledNotifications (logger h))
               saveRobots
-              liftIO $ threadDelay 5000000
+              liftIO $ threadDelay 1000000
   where
     saveRobots :: JunctionM ()
     saveRobots = do
@@ -264,7 +267,7 @@ junctionMain descriptors = do
                                 Notification ->
                                 IO ()
     handleBrokerNotification robotsRef ordersMapRef handled logger notification= do
-      logWith logger Trace "Junction" $ "Incoming notification: " <> (T.pack . show) notification
+      logWith logger Trace "Junction" $ "Incoming notification: " <> (T.pack . show . unNotificationSqnum . getNotificationSqnum) notification
       whenM (notMember (getNotificationSqnum notification) <$> readIORef handled) $ do
         robotsMap <- readIORef robotsRef
         ordersMap <- readIORef ordersMapRef
