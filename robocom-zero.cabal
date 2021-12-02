@@ -26,7 +26,6 @@ library
                      , ATrade.Quotes
                      , ATrade.Quotes.QHP
                      , ATrade.Quotes.QTIS
---                     , ATrade.Driver.Real
 --                     , ATrade.Driver.Backtest
                      , ATrade.Driver.Junction
                      , ATrade.Driver.Junction.Types
@@ -44,17 +43,12 @@ library
                      , libatrade >= 0.11.0.0 && < 0.12.0.0
                      , text
                      , text-icu
-                     , errors
                      , lens
                      , bytestring
-                     , cassava
                      , containers
                      , time
                      , vector
-                     , wreq
                      , safe
-                     , parsec
-                     , parsec-numbers
                      , aeson
                      , binary
                      , binary-ieee754
@@ -65,32 +59,23 @@ library
                      , th-printf
                      , BoundedChan
                      , monad-loops
-                     , conduit
                      , safe-exceptions
                      , mtl
                      , transformers
-                     , list-extras
                      , optparse-applicative
-                     , split
                      , signal
-                     , random
                      , hedis
                      , gitrev
                      , data-default
                      , template-haskell
-                     , unliftio
-                     , monad-logger
                      , bimap
-                     , stm
-                     , async
                      , dhall
                      , extra
                      , co-log
+                     , text-show
                      
   default-language:    Haskell2010
   other-modules:       ATrade.Exceptions
---                     , ATrade.Driver.Real.BrokerClientThread
---                     , ATrade.Driver.Real.QuoteSourceThread
                      , ATrade.Driver.Types
 
 test-suite robots-test
