@@ -159,7 +159,9 @@ instance MonadRobot (RobotM c s) c s where
     bro <- asks brokerService
     liftIO . void $ Bro.cancelOrder bro oid
 
-  appendToLog = logInfo "RobotM" . TL.toStrict -- TODO get instance id from environment and better use it instead of generic 'RobotM'
+  appendToLog t = do
+    instId <- _seInstanceId <$> (asks env >>= liftIO . readIORef)
+    logInfo instId . TL.toStrict $ t
 
   setupTimer t = do
     ref <- asks timersRef

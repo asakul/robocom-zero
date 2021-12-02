@@ -30,7 +30,7 @@ data ProgramConfiguration =
     qtisEndpoint               :: T.Text,
     redisSocket                :: T.Text,
     robotsConfigsPath          :: FilePath,
-    globalLog                  :: FilePath,
+    logBasePath                :: FilePath,
     instances                  :: [StrategyInstanceDescriptor]
   } deriving (Generic, Show)
 

@@ -55,6 +55,7 @@ import           Colog                                       (HasLog (getLogActi
                                                               LogAction,
                                                               logTextStdout,
                                                               (>$<))
+import           Colog.Actions                               (logTextHandle)
 import           Control.Concurrent                          (threadDelay)
 import           Control.Exception.Safe                      (MonadThrow,
                                                               bracket)
@@ -98,6 +99,12 @@ import           Options.Applicative                         (Parser,
                                                               (<**>))
 import           Prelude                                     hiding (log,
                                                               readFile)
+import           System.IO                                   (BufferMode (LineBuffering),
+                                                              Handle,
+                                                              IOMode (AppendMode),
+                                                              hSetBuffering,
+                                                              openFile,
+                                                              withFile)
 import           System.ZMQ4                                 (withContext)
 import           System.ZMQ4.ZAP                             (loadCertificateFromFile)
 
@@ -161,48 +168,54 @@ instance QuoteStream JunctionM where
     return (SubscriptionId 0) -- TODO subscription Ids
   removeSubscription _ = undefined
 
+logger :: (MonadIO m) => Handle -> LogAction m Message
+logger h = fmtMessage >$< (logTextStdout <> logTextHandle h)
+
 junctionMain :: M.Map T.Text StrategyDescriptorE -> IO ()
 junctionMain descriptors = do
   opts <- parseOptions
 
-  let logger = fmtMessage >$< logTextStdout
-  let log = logWith logger
+  let initialLogger = fmtMessage >$< logTextStdout
 
-  log Info "Junction" $ "Reading config from: " <> (T.pack . show) (configPath opts)
+  logWith initialLogger Info "Junction" $ "Reading config from: " <> (T.pack . show) (configPath opts)
 
   cfg <- readFile (configPath opts) >>= input auto
 
-  barsMap <- newIORef M.empty
+  withFile (logBasePath cfg <> "/all.log") AppendMode $ \h -> do
 
-  log Info "Junction" $ "Connecting to redis: " <> redisSocket cfg
-  redis <- checkedConnect (defaultConnectInfo { connectPort = UnixSocket (T.unpack $ redisSocket cfg) })
-  log Info "Junction" "redis: connected"
-  withContext $ \ctx -> do
-    log Debug "Junction" "0mq context created"
-    let downloaderLogAction = fmtMessage >$< logTextStdout
-    let downloaderEnv = DownloaderEnv (mkQHPHandle ctx (qhpEndpoint cfg)) ctx (qtisEndpoint cfg) downloaderLogAction
-    robotsMap <- newIORef M.empty
-    ordersMap <- newIORef M.empty
-    handledNotifications <- newIORef S.empty
-    withBroker cfg ctx robotsMap ordersMap handledNotifications logger $ \bro ->
-      withQThread downloaderEnv barsMap cfg ctx $ \qt -> do
-        broService <- mkBrokerService bro ordersMap
-        let junctionLogAction = fmtMessage >$< logTextStdout
-        let env =
-              JunctionEnv
-              {
-                peRedisSocket = redis,
-                peConfigPath = robotsConfigsPath cfg,
-                peQuoteThread = qt,
-                peBroker = bro,
-                peRobots = robotsMap,
-                peLogAction = junctionLogAction
-              }
-        withJunction env $ do
-          startRobots cfg barsMap broService
-          forever $ do
-            saveRobots
-            liftIO $ threadDelay 5000000
+    let log = logWith (logger h)
+
+    barsMap <- newIORef M.empty
+
+    log Info "Junction" $ "Connecting to redis: " <> redisSocket cfg
+    redis <- checkedConnect (defaultConnectInfo { connectPort = UnixSocket (T.unpack $ redisSocket cfg) })
+    log Info "Junction" "redis: connected"
+    withContext $ \ctx -> do
+      log Debug "Junction" "0mq context created"
+      let downloaderLogAction = logger h
+      let downloaderEnv = DownloaderEnv (mkQHPHandle ctx (qhpEndpoint cfg)) ctx (qtisEndpoint cfg) downloaderLogAction
+      robotsMap <- newIORef M.empty
+      ordersMap <- newIORef M.empty
+      handledNotifications <- newIORef S.empty
+      withBroker cfg ctx robotsMap ordersMap handledNotifications (logger h) $ \bro ->
+        withQThread downloaderEnv barsMap cfg ctx $ \qt -> do
+          broService <- mkBrokerService bro ordersMap
+          let junctionLogAction = logger h
+          let env =
+                JunctionEnv
+                {
+                  peRedisSocket = redis,
+                  peConfigPath = robotsConfigsPath cfg,
+                  peQuoteThread = qt,
+                  peBroker = bro,
+                  peRobots = robotsMap,
+                  peLogAction = junctionLogAction
+                }
+          withJunction env $ do
+            startRobots h cfg barsMap broService
+            forever $ do
+              saveRobots
+              liftIO $ threadDelay 5000000
   where
     saveRobots :: JunctionM ()
     saveRobots = do
@@ -216,8 +229,8 @@ junctionMain descriptors = do
       currentTimers <- liftIO $ readIORef (strategyTimers inst)
       saveState currentTimers (strategyInstanceId inst <> ":timers")
 
-    startRobots :: ProgramConfiguration -> IORef Bars -> BrokerService -> JunctionM ()
-    startRobots cfg barsMap broService = forM_ (instances cfg) $ \inst -> do
+    startRobots :: Handle -> ProgramConfiguration -> IORef Bars -> BrokerService -> JunctionM ()
+    startRobots logHandle cfg barsMap broService = forM_ (instances cfg) $ \inst -> do
       now <- liftIO getCurrentTime
       case M.lookup (strategyBaseName inst) descriptors of
         Just (StrategyDescriptorE desc) -> do
@@ -225,7 +238,9 @@ junctionMain descriptors = do
           rConf <- liftIO $ newIORef (confStrategy bigConf)
           rState <- loadState (stateKey inst) >>= liftIO . newIORef
           rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
-          let robotLogAction = fmtMessage >$< logTextStdout
+          localH <- liftIO $ openFile (logBasePath cfg <> "/" <> T.unpack (strategyId inst) <> ".log") AppendMode
+          liftIO $ hSetBuffering localH LineBuffering
+          let robotLogAction = logger logHandle <> (fmtMessage >$< logTextHandle localH)
           stratEnv <- liftIO $ newIORef StrategyEnvironment
                          {
                            _seInstanceId = strategyId inst,
