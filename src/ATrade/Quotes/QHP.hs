@@ -11,7 +11,7 @@ module ATrade.Quotes.QHP (
   ) where
 
 import           ATrade.Exceptions
-import           ATrade.Logging          (Message, logInfo)
+import           ATrade.Logging          (Message, logInfo, logDebug)
 import           ATrade.Types
 import           Colog                   (WithLog)
 import           Control.Exception.Safe  (MonadThrow, throw)
@@ -103,7 +103,8 @@ instance ToJSON RequestParams where
 getQuotes :: (WithLog env Message m, MonadIO m) => Context -> RequestParams -> m [Bar]
 getQuotes ctx params = do
   logInfo "QHP" $ "Connecting to ep: " <> endpoint params
-  liftIO $ withSocket ctx Req $ \sock -> do
+  logDebug "QHP" $ "From: " <> (T.pack . show) (startDate params) <> "; To: " <> (T.pack . show) (endDate params)
+  result <- liftIO $ withSocket ctx Req $ \sock -> do
     connect sock $ (T.unpack . endpoint) params
     send sock [] (BL.toStrict $ encode params)
     response <- receiveMulti sock
@@ -112,6 +113,8 @@ getQuotes ctx params = do
                           then return $ reverse $ parseBars (ticker params) $ BL.fromStrict rest
                           else return []
       _ -> return []
+  logInfo "QHP" $ "Obtained bars: " <> (T.pack . show . length) result
+  return result
 
 parseBars :: TickerId -> BL.ByteString -> [Bar]
 parseBars tickerId input =
