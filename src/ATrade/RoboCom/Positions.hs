@@ -371,9 +371,7 @@ newPosition order account tickerId operation quantity submissionDeadline = do
   return position
 
 reapDeadPositions :: (StateHasPositions s) => EventCallback c s
-reapDeadPositions _ = do
-  ts <- view seLastTimestamp <$> getEnvironment
-  when (floor (utctDayTime ts) `mod` 300 == 0) $ modifyPositions (L.filter (not . posIsDead))
+reapDeadPositions _ = modifyPositions (L.filter (not . posIsDead))
 
 defaultHandler :: (StateHasPositions s) => EventCallback c s
 defaultHandler = reapDeadPositions `also` handlePositions
