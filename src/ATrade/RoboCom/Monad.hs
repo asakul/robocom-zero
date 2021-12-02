@@ -19,8 +19,8 @@ module ATrade.RoboCom.Monad (
   MonadRobot(..),
   also,
   t,
-  st
-) where
+  st,
+  getFirstTickerId) where
 
 import           ATrade.RoboCom.Types
 import           ATrade.Types
@@ -33,6 +33,8 @@ import           Data.Time.Clock
 import           Language.Haskell.Printf
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import ATrade.Logging (Severity)
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
   submitOrder :: Order -> m OrderId
@@ -49,6 +51,10 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
     setState (f oldState)
   getEnvironment :: m StrategyEnvironment
   getTicker :: TickerId -> BarTimeframe -> m (Maybe BarSeries)
+  getAvailableTickers :: m (NonEmpty BarSeriesId)
+
+getFirstTickerId :: forall c s m. (Monad m, MonadRobot m c s) => m BarSeriesId
+getFirstTickerId = NE.head <$> getAvailableTickers
 
 st :: QuasiQuoter
 st = t

@@ -38,9 +38,12 @@ import           ATrade.Driver.Junction.Types                (StrategyDescriptor
                                                               StrategyInstance (strategyInstanceId),
                                                               StrategyInstanceDescriptor (..),
                                                               confStrategy,
+                                                              confTickers,
                                                               strategyState,
-                                                              strategyTimers)
-import           ATrade.Logging                              (Message, Severity (Debug, Info, Trace, Warning),
+                                                              strategyTimers,
+                                                              tickerId,
+                                                              timeframe)
+import           ATrade.Logging                              (Message, Severity (Debug, Error, Info, Trace, Warning),
                                                               fmtMessage,
                                                               logWarning,
                                                               logWith)
@@ -48,7 +51,8 @@ import           ATrade.Quotes.QHP                           (mkQHPHandle)
 import           ATrade.RoboCom.ConfigStorage                (ConfigStorage (loadConfig))
 import           ATrade.RoboCom.Monad                        (StrategyEnvironment (..))
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
-import           ATrade.RoboCom.Types                        (Bars)
+import           ATrade.RoboCom.Types                        (BarSeriesId (BarSeriesId),
+                                                              Bars)
 import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams),
                                                               OrderId,
                                                               Trade (tradeOrderId))
@@ -74,6 +78,7 @@ import           Data.IORef                                  (IORef,
                                                               atomicModifyIORef',
                                                               newIORef,
                                                               readIORef)
+import           Data.List.NonEmpty                          (NonEmpty ((:|)))
 import qualified Data.Map.Strict                             as M
 import           Data.Set                                    (notMember)
 import qualified Data.Set                                    as S
@@ -238,24 +243,29 @@ junctionMain descriptors = do
       case M.lookup (strategyBaseName inst) descriptors of
         Just (StrategyDescriptorE desc) -> do
           bigConf <- loadConfig (configKey inst)
-          rConf <- liftIO $ newIORef (confStrategy bigConf)
-          rState <- loadState (stateKey inst) >>= liftIO . newIORef
-          rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
-          localH <- liftIO $ openFile (logBasePath cfg <> "/" <> T.unpack (strategyId inst) <> ".log") AppendMode
-          liftIO $ hSetBuffering localH LineBuffering
-          let robotLogAction = logger logHandle <> (fmtMessage >$< logTextHandle localH)
-          stratEnv <- liftIO $ newIORef StrategyEnvironment
-                         {
-                           _seInstanceId = strategyId inst,
-                           _seAccount = "test", -- TODO configure
-                           _seVolume = 1,
-                           _seLastTimestamp = now
-                         }
-          let robotEnv = RobotEnv rState rConf rTimers barsMap stratEnv robotLogAction broService
-          robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState rTimers
-          robotsMap' <- asks peRobots
-          liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
+          case confTickers bigConf of
+            (firstTicker:restTickers) -> do
+              rConf <- liftIO $ newIORef (confStrategy bigConf)
+              rState <- loadState (stateKey inst) >>= liftIO . newIORef
+              rTimers <- loadState (stateKey inst <> ":timers") >>= liftIO . newIORef
+              localH <- liftIO $ openFile (logBasePath cfg <> "/" <> T.unpack (strategyId inst) <> ".log") AppendMode
+              liftIO $ hSetBuffering localH LineBuffering
+              let robotLogAction = logger logHandle <> (fmtMessage >$< logTextHandle localH)
+              stratEnv <- liftIO $ newIORef StrategyEnvironment
+                             {
+                               _seInstanceId = strategyId inst,
+                               _seAccount = "test", -- TODO configure
+                               _seVolume = 1,
+                               _seLastTimestamp = now
+                             }
+              let robotEnv = RobotEnv rState rConf rTimers barsMap stratEnv robotLogAction broService (toBarSeriesId <$> (firstTicker :| restTickers))
+              robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState rTimers
+              robotsMap' <- asks peRobots
+              liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
+            _ -> logWith (logger logHandle) Error (strategyId inst) $ "No tickers configured !!!"
         Nothing   -> error "Unknown strategy"
+
+    toBarSeriesId t = BarSeriesId (tickerId t) (timeframe t)
 
     withJunction :: JunctionEnv -> JunctionM () -> IO ()
     withJunction env = (`runReaderT` env) . unJunctionM
