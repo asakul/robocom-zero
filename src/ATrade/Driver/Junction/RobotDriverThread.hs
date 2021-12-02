@@ -15,6 +15,7 @@ module ATrade.Driver.Junction.RobotDriverThread
   onStrategyInstance,
   postNotificationEvent) where
 
+import Prelude hiding (log)
 import           ATrade.Broker.Protocol               (Notification (OrderNotification, TradeNotification))
 import qualified ATrade.Driver.Junction.BrokerService as Bro
 import           ATrade.Driver.Junction.QuoteStream   (QuoteStream (addSubscription),
@@ -29,7 +30,7 @@ import           ATrade.Driver.Junction.Types         (BigConfig,
                                                        strategyId, tickerId,
                                                        timeframe)
 import           ATrade.Logging                       (Message, logDebug,
-                                                       logInfo, logWarning)
+                                                       logInfo, logWarning, log)
 import           ATrade.QuoteSource.Client            (QuoteData (..))
 import           ATrade.RoboCom.ConfigStorage         (ConfigStorage)
 import           ATrade.RoboCom.Monad                 (Event (NewBar, NewTick, NewTrade, OrderSubmitted, OrderUpdate),
@@ -159,9 +160,9 @@ instance MonadRobot (RobotM c s) c s where
     bro <- asks brokerService
     liftIO . void $ Bro.cancelOrder bro oid
 
-  appendToLog t = do
+  appendToLog s t = do
     instId <- _seInstanceId <$> (asks env >>= liftIO . readIORef)
-    logInfo instId . TL.toStrict $ t
+    log s instId $ TL.toStrict t
 
   setupTimer t = do
     ref <- asks timersRef

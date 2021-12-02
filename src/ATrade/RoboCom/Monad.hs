@@ -32,11 +32,12 @@ import qualified Data.Text.Lazy            as TL
 import           Data.Time.Clock
 import           Language.Haskell.Printf
 import           Language.Haskell.TH.Quote (QuasiQuoter)
+import ATrade.Logging (Severity)
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
   submitOrder :: Order -> m OrderId
   cancelOrder :: OrderId -> m ()
-  appendToLog :: TL.Text -> m ()
+  appendToLog :: Severity -> TL.Text -> m ()
   setupTimer :: UTCTime -> m ()
   enqueueIOAction :: Int -> IO Value -> m ()
   getConfig :: m c
