@@ -204,7 +204,7 @@ junctionMain descriptors = do
       ordersMap <- newIORef M.empty
       handledNotifications <- newIORef S.empty
       withBroker cfg ctx robotsMap ordersMap handledNotifications (logger h) $ \bro ->
-        withQThread downloaderEnv barsMap cfg ctx $ \qt -> do
+        withQThread downloaderEnv barsMap cfg ctx (logger h) $ \qt -> do
           broService <- mkBrokerService bro ordersMap
           let junctionLogAction = logger h
           let env =
@@ -254,7 +254,7 @@ junctionMain descriptors = do
               stratEnv <- liftIO $ newIORef StrategyEnvironment
                              {
                                _seInstanceId = strategyId inst,
-                               _seAccount = "test", -- TODO configure
+                               _seAccount = accountId inst,
                                _seVolume = 1,
                                _seLastTimestamp = now
                              }

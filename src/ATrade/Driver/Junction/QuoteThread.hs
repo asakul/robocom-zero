@@ -92,11 +92,12 @@ startQuoteThread :: (MonadIO m,
   T.Text ->
   ClientSecurityParams ->
   (m1 () -> IO ()) ->
+  LogAction IO Message ->
   m QuoteThreadHandle
-startQuoteThread barsRef ctx ep secparams downloadThreadRunner = do
+startQuoteThread barsRef ctx ep secparams downloadThreadRunner logger = do
   chan <- liftIO $ newBoundedChan 2000
   dChan <- liftIO $ newBoundedChan 2000
-  qsc <- liftIO $ startQuoteSourceClient chan [] ctx ep secparams
+  qsc <- liftIO $ startQuoteSourceClient chan [] ctx ep secparams logger
   env <- liftIO $ QuoteThreadEnv barsRef <$> newIORef HM.empty <*> pure qsc <*> newIORef M.empty <*> pure dChan
   tid <- liftIO . forkIO $ quoteThread env chan
   downloaderTid <- liftIO . forkIO $ downloadThreadRunner (downloaderThread env dChan)
@@ -199,8 +200,8 @@ instance TickerInfoProvider DownloaderM where
                      (fromInteger $ tiLotSize ti)
                      (tiTickSize ti)
 
-withQThread :: DownloaderEnv -> IORef Bars -> ProgramConfiguration -> Context -> (QuoteThreadHandle -> IO ()) -> IO ()
-withQThread env barsMap cfg ctx f = do
+withQThread :: DownloaderEnv -> IORef Bars -> ProgramConfiguration -> Context -> LogAction IO Message -> (QuoteThreadHandle -> IO ()) -> IO ()
+withQThread env barsMap cfg ctx logger f = do
     securityParameters <- loadSecurityParameters
     bracket
       (startQuoteThread
@@ -208,7 +209,8 @@ withQThread env barsMap cfg ctx f = do
           ctx
           (quotesourceEndpoint cfg)
           securityParameters
-          (runDownloaderM env))
+          (runDownloaderM env)
+          logger)
       stopQuoteThread f
   where
     loadSecurityParameters =

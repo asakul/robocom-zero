@@ -56,6 +56,7 @@ instance (FromDhall c) => FromDhall (BigConfig c)
 data StrategyInstanceDescriptor =
   StrategyInstanceDescriptor
   {
+    accountId        :: T.Text,
     strategyId       :: T.Text,
     strategyBaseName :: T.Text,
     configKey        :: T.Text,
