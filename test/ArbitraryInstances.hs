@@ -52,7 +52,7 @@ instance Arbitrary OrderPrice where
        | v == 2 -> Limit <$> arbitrary `suchThat` notTooBig
        | v == 3 -> Stop <$> arbitrary `suchThat` notTooBig <*> arbitrary `suchThat` notTooBig
        | v == 4 -> StopMarket <$> arbitrary `suchThat` notTooBig
-       | otherwise -> fail "Invalid case"
+       | otherwise -> error "invalid case"
 
 instance Arbitrary Operation where
   arbitrary = elements [Buy, Sell]

@@ -13,15 +13,14 @@ module ATrade.RoboCom.Monad (
   seInstanceId,
   seAccount,
   seVolume,
-  seBars,
   seLastTimestamp,
   EventCallback,
   Event(..),
   MonadRobot(..),
   also,
   t,
-  st
-) where
+  st,
+  getFirstTickerId) where
 
 import           ATrade.RoboCom.Types
 import           ATrade.Types
@@ -33,11 +32,14 @@ import qualified Data.Text.Lazy            as TL
 import           Data.Time.Clock
 import           Language.Haskell.Printf
 import           Language.Haskell.TH.Quote (QuasiQuoter)
+import ATrade.Logging (Severity)
+import Data.List.NonEmpty (NonEmpty)
+import qualified Data.List.NonEmpty as NE
 
 class (Monad m) => MonadRobot m c s | m -> c, m -> s where
-  submitOrder :: Order -> m ()
+  submitOrder :: Order -> m OrderId
   cancelOrder :: OrderId -> m ()
-  appendToLog :: TL.Text -> m ()
+  appendToLog :: Severity -> TL.Text -> m ()
   setupTimer :: UTCTime -> m ()
   enqueueIOAction :: Int -> IO Value -> m ()
   getConfig :: m c
@@ -48,13 +50,18 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
     oldState <- getState
     setState (f oldState)
   getEnvironment :: m StrategyEnvironment
+  getTicker :: TickerId -> BarTimeframe -> m (Maybe BarSeries)
+  getAvailableTickers :: m (NonEmpty BarSeriesId)
+
+getFirstTickerId :: forall c s m. (Monad m, MonadRobot m c s) => m BarSeriesId
+getFirstTickerId = NE.head <$> getAvailableTickers
 
 st :: QuasiQuoter
 st = t
 
 type EventCallback c s = forall m . MonadRobot m c s => Event -> m ()
 
-data Event = NewBar Bar
+data Event = NewBar (BarTimeframe, Bar)
   | NewTick Tick
   | OrderSubmitted Order
   | OrderUpdate OrderId OrderState
@@ -68,7 +75,6 @@ data StrategyEnvironment = StrategyEnvironment {
   _seInstanceId    :: !T.Text, -- ^ Strategy instance identifier. Should be unique among all strategies (very desirable)
   _seAccount       :: !T.Text, -- ^ Account string to use for this strategy instance. Broker-dependent
   _seVolume        :: !Int, -- ^ Volume to use for this instance (in lots/contracts)
-  _seBars          :: !Bars, -- ^ List of tickers which is used by this strategy
   _seLastTimestamp :: !UTCTime
 } deriving (Eq)
 makeLenses ''StrategyEnvironment
