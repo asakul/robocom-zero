@@ -200,8 +200,8 @@ instance FromRecord Row where
       high <- v .! 5
       low <- v .! 6
       close <- v .! 7
-      volume <- v .! 8
-      return $ Row tkr dt open high low close volume
+      vol <- v .! 8
+      return $ Row tkr dt open high low close vol
     | otherwise     = mzero
     where
       parseDt :: B.ByteString -> B.ByteString -> Parser UTCTime

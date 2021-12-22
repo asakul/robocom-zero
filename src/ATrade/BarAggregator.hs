@@ -1,4 +1,5 @@
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE MultiWayIf   #-}
 
 {-|
  - Module       : ATrade.BarAggregator
@@ -19,8 +20,10 @@ module ATrade.BarAggregator (
   mkAggregatorFromBars,
   handleTicks,
   handleTick,
+  updateTime,
   handleBar,
-  hmsToDiffTime
+  hmsToDiffTime,
+  replaceHistory
 ) where
 
 import           ATrade.RoboCom.Types
@@ -30,7 +33,6 @@ import           Control.Lens
 import           Control.Monad.State
 import qualified Data.Map.Strict      as M
 import           Data.Time.Clock
-import           Debug.Trace
 
 -- | Bar aggregator state
 data BarAggregator = BarAggregator {
@@ -45,6 +47,9 @@ mkAggregatorFromBars myBars timeWindows = BarAggregator {
   bars = myBars,
   lastTicks = M.empty,
   tickTimeWindows = timeWindows }
+
+replaceHistory :: BarAggregator -> M.Map TickerId BarSeries -> BarAggregator
+replaceHistory agg bars' = agg { bars = bars' }
 
 lBars :: (M.Map TickerId BarSeries -> Identity (M.Map TickerId BarSeries)) -> BarAggregator -> Identity BarAggregator
 lBars = lens bars (\s b -> s { bars = b })
@@ -108,7 +113,7 @@ handleTick tick = runState $ do
     else
       return Nothing
   where
-    isInTimeInterval tick (a, b) = (utctDayTime . timestamp) tick >= a && (utctDayTime . timestamp) tick <= b
+    isInTimeInterval tick' (a, b) = (utctDayTime . timestamp) tick' >= a && (utctDayTime . timestamp) tick' <= b
     barFromTick !newtick = Bar { barSecurity = security newtick,
       barTimestamp = timestamp newtick,
       barOpen = value newtick,
@@ -132,64 +137,65 @@ handleTick tick = runState $ do
       where
         newTimestamp = timestamp newtick
 
-    emptyBarFrom !bar newtick = newBar
-      where
-        newTimestamp = timestamp newtick
-        newBar = Bar {
-          barSecurity = barSecurity bar,
-          barTimestamp = newTimestamp,
-          barOpen = barClose bar,
-          barHigh = barClose bar,
-          barLow = barClose bar,
-          barClose = barClose bar,
-          barVolume = 0 }
-
-handleBar :: Bar -> BarAggregator -> (Maybe Bar, BarAggregator)
-handleBar bar = runState $ do
+updateTime :: Tick -> BarAggregator -> (Maybe Bar, BarAggregator)
+updateTime tick = runState $ do
+  lLastTicks %= M.insert (security tick, datatype tick) tick
   tws <- gets tickTimeWindows
   mybars <- gets bars
-  if (any (isInTimeInterval bar) tws)
+  if (any (isInTimeInterval tick) tws)
     then
-      case M.lookup (barSecurity bar) mybars of
+      case M.lookup (security tick) mybars of
         Just series -> case bsBars series of
           (b:bs) -> do
             let currentBn = barNumber (barTimestamp b) (tfSeconds $ bsTimeframe series)
-            if currentBn == barNumber (barTimestamp bar) (tfSeconds $ bsTimeframe series)
-              then do
-                lBars %= M.insert (barSecurity bar) series { bsBars = updateBar b bar : bs }
-                return Nothing
-              else
-                if barEndTime b (tfSeconds $ bsTimeframe series) == barTimestamp bar
-                  then do
-                    lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : (updateBar b bar : bs) }
-                    return . Just $ updateBar b bar
-                  else do
-                    lBars %= M.insert (barSecurity bar) series { bsBars = bar : b : bs }
-                    return . Just $ b
-          _      -> do
-            lBars %= M.insert (barSecurity bar) series { bsBars = [bar] }
-            return Nothing
+            let thisBn = barNumber (timestamp tick) (tfSeconds $ bsTimeframe series)
+            if
+              | currentBn == thisBn -> do
+                  lBars %= M.insert (security tick) series { bsBars = updateBarTimestamp b tick : bs }
+                  return Nothing
+              | currentBn < thisBn -> do
+                  lBars %= M.insert (security tick) series { bsBars = emptyBarFromTick tick : b : bs }
+                  return $ Just b
+              | otherwise -> return Nothing
+          _ -> return Nothing
         _ -> return Nothing
     else
       return Nothing
   where
-    isInTimeInterval bar' (a, b) = (utctDayTime . barTimestamp) bar' >= a && (utctDayTime . barTimestamp) bar' <= b
-    updateBar !bar' newbar =
-      let newHigh = max (barHigh bar') (barHigh newbar)
-          newLow = min (barLow bar') (barLow newbar) in
-        bar' {
-            barTimestamp = barTimestamp newbar,
-            barHigh = newHigh,
-            barLow = newLow,
-            barClose = barClose newbar,
-            barVolume = barVolume bar' + (abs . barVolume $ newbar) }
+    isInTimeInterval t (a, b) = (utctDayTime . timestamp) t >= a && (utctDayTime . timestamp) t <= b
+    emptyBarFromTick !newtick = Bar { barSecurity = security newtick,
+      barTimestamp = timestamp newtick,
+      barOpen = value newtick,
+      barHigh = value newtick,
+      barLow = value newtick,
+      barClose = value newtick,
+      barVolume = 0 }
 
+    updateBarTimestamp !bar newtick = bar { barTimestamp = newTimestamp }
+      where
+        newTimestamp = timestamp newtick
+
+handleBar :: Bar -> BarAggregator -> (Maybe Bar, BarAggregator)
+handleBar bar = runState $ do
+  mybars <- gets bars
+  case M.lookup (barSecurity bar) mybars of
+    Just series -> case bsBars series of
+      (_:bs) -> do
+        lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : bar : bs }
+        return . Just $ bar
+      _      -> do
+        lBars %= M.insert (barSecurity bar) series { bsBars = emptyBarFrom bar : [bar] }
+        return Nothing
+    _ -> return Nothing
+  where
     emptyBarFrom bar' = Bar {
-          barSecurity = barSecurity bar',
-          barTimestamp = barTimestamp bar',
-          barOpen = barClose bar',
-          barHigh = barClose bar',
-          barLow = barClose bar',
-          barClose = barClose bar',
-          barVolume = 0 }
+      barSecurity = barSecurity bar',
+      barTimestamp = barTimestamp bar',
+      barOpen = barClose bar',
+      barHigh = barClose bar',
+      barLow = barClose bar',
+      barClose = barClose bar',
+      barVolume = 0 }
+
+
 

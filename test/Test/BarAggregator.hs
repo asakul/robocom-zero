@@ -34,6 +34,7 @@ unitTests = testGroup "BarAggregator" [
   , testTwoBarsInSameBar
   , testTwoBarsInSameBarLastBar
   , testNextBarAfterBarClose
+  , testUpdateTime
   ]
 
 properties = testGroup "BarAggregator" [
@@ -194,6 +195,37 @@ testNextBarAfterBarClose = testCase "Three bars (smaller timeframe) - next bar a
             barClose = fromDouble c,
             barVolume = v }
 
+testUpdateTime :: TestTree
+testUpdateTime = testCase "updateTime - next bar - creates new bar with zero volume" $ do
+  let series = BarSeries "TEST_TICKER" (Timeframe 3600) []
+  let agg = mkAggregatorFromBars (M.fromList [("TEST_TICKER", series)]) [(0, 86400)]
+  let (_, newagg) = handleBar (bar testTimestamp1 12.00 13.00 10.00 11.00 1) agg
+  let (_, newagg') = handleBar (bar testTimestamp2 12.00 15.00 11.00 12.00 2) newagg
+  let (newBar, newagg'') = updateTime (tick testTimestamp4 13.00 100) newagg'
+  let expectedNewBar = Bar "TEST_TICKER" testTimestamp2 12.00 15.00 10.00 12.00 3
+  let expectedBar = Bar "TEST_TICKER" testTimestamp4 13.00 13.00 13.00 13.00 0
+  (head <$> bsBars <$> (M.lookup "TEST_TICKER" $ bars newagg'')) @?= Just expectedBar
+  newBar @?= Just expectedNewBar
+  where
+    testTimestamp1 = (UTCTime (fromGregorian 1970 1 1) 560)
+    testTimestamp2 = (UTCTime (fromGregorian 1970 1 1) 600)
+    testTimestamp3 = (UTCTime (fromGregorian 1970 1 1) 3600)
+    testTimestamp4 = (UTCTime (fromGregorian 1970 1 1) 3660)
+    tick ts v vol = Tick {
+              security = "TEST_TICKER"
+            , datatype = LastTradePrice
+            , timestamp = ts
+            , value = v
+            , volume = vol }
+    bar ts o h l c v = Bar {
+            barSecurity = "TEST_TICKER",
+            barTimestamp = ts,
+            barOpen = fromDouble o,
+            barHigh = fromDouble h,
+            barLow = fromDouble l,
+            barClose = fromDouble c,
+            barVolume = v }
+
 prop_allTicksInOneBar :: TestTree
 prop_allTicksInOneBar = testProperty "All ticks in one bar" $ property $ do
   tf <- forAll $ Gen.integral (Range.constant 1 86400)
@@ -218,38 +250,4 @@ prop_allTicksInOneBar = testProperty "All ticks in one bar" $ property $ do
 
     currentBar tickerId agg = headMay =<< (bsBars <$> M.lookup tickerId (bars agg))
     baseTime = UTCTime (fromGregorian 1970 1 1) 0
-
-
-prop_ticksInTwoBars :: TestTree
-prop_ticksInTwoBars = testProperty "Ticks in one bar, then in next bar" $ property $ do
-  tf <- forAll $ Gen.integral (Range.constant 1 86400)
-  ticks1 <- forAll $ Gen.list (Range.linear 1 100) (genTick "TEST_TICKER" (baseTime 0) tf)
-  ticks2 <- forAll $ Gen.list (Range.linear 1 100) (genTick "TEST_TICKER" (baseTime $ secondsToDiffTime tf) tf)
-  let ticks1' = sortOn timestamp ticks1
-  let ticks2' = sortOn timestamp ticks2
-  let (_, agg) = handleTicks ticks1' (mkAggregator "TEST_TICKER" tf)
-  let ([newbar], agg') = handleTicks ticks2' agg
-  barSecurity newbar === "TEST_TICKER"
-  (barHigh newbar) === (maximum $ value <$> ticks1)
-  (barLow newbar) === (minimum $ value <$> ticks1)
-  (barOpen newbar) === (value . head $ ticks1')
-  (barClose newbar) === (value . last $ ticks1')
-  (barVolume newbar) === (sum $ volume <$> ticks1)
-  (barHigh <$> currentBar "TEST_TICKER" agg') === Just (maximum $ value <$> ticks2)
-  (barLow <$> currentBar "TEST_TICKER" agg') === Just (minimum $ value <$> ticks2)
-  (barOpen <$> currentBar "TEST_TICKER" agg') === (value <$> headMay ticks2')
-  (barClose <$> currentBar "TEST_TICKER" agg') === (value <$> lastMay ticks2')
-  (barVolume <$> currentBar "TEST_TICKER" agg') === Just (sum $ volume <$> ticks2)
-
-  where
-    genTick :: T.Text -> UTCTime -> Integer -> Gen Tick
-    genTick tickerId base tf = do
-      difftime <- fromRational . toRational . picosecondsToDiffTime <$> Gen.integral (Range.linear 0 (truncate 1e12 * tf))
-      val <- fromDouble <$> Gen.double (Range.exponentialFloat 0.00001 100)
-      vol <- Gen.integral (Range.exponential 1 100)
-      return $ Tick tickerId LastTradePrice (difftime `addUTCTime` base) val vol
-    mkAggregator tickerId tf = mkAggregatorFromBars (M.singleton tickerId (BarSeries tickerId (Timeframe tf) [])) [(0, 86400)]
-
-    currentBar tickerId agg = headMay =<< (bsBars <$> M.lookup tickerId (bars agg))
-    baseTime offset = UTCTime (fromGregorian 1970 1 1) offset
 

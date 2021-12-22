@@ -9,18 +9,18 @@ module ATrade.RoboCom.Utils (
   barNumber,
   getHMS,
   getHMS',
+  fromHMS,
   fromHMS',
   parseTime
 ) where
 
 import           ATrade.Types
 
-import qualified Data.Text              as T
-import           Data.Text.Lazy.Builder
+import qualified Data.Text          as T
 import           Data.Time.Calendar
 import           Data.Time.Clock
 
-import           Text.Read              hiding (String)
+import           Text.Read          hiding (String)
 
 rescaleToDaily :: [Bar] -> [Bar]
 rescaleToDaily (firstBar:restBars) = rescaleToDaily' restBars firstBar
@@ -66,6 +66,9 @@ fromHMS' hms = fromIntegral $ h * 3600 + m * 60 + s
     h = hms `div` 10000
     m = (hms `mod` 10000) `div` 100
     s = (hms `mod` 100)
+
+fromHMS :: Int -> Int -> Int -> DiffTime
+fromHMS h m s = fromIntegral $ h * 3600 + m * 60 + s
 
 parseTime :: T.Text -> Maybe DiffTime
 parseTime x = case readMaybe (T.unpack x) of

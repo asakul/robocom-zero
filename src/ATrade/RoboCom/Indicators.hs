@@ -40,7 +40,7 @@ cci period bars = (head tp - tpMean) / (0.015 * meanDev)
     typicalPrice a b c = (a + b + c) / 3
 
 atr :: Int -> [Bar] -> Double
-atr period bars = case reverse (take (5 * period) trueranges) of
+atr period bars = case reverse (take (10 * period) trueranges) of
                     (firstValue:rest) -> foldl (\x y -> (x * (period' - 1) + y) / period') firstValue rest
                     _ -> 0
   where
@@ -121,6 +121,6 @@ bbandUpper period devs values = sma period values + devs * sigma
     mean = sma period
 
 percentRank :: Int -> [Double] -> Double
-percentRank period values@(v:vs) = fromIntegral (length (filter (\x -> x < v) $ take period values)) / fromIntegral (length (take period values))
-percentRank period [] = 0
+percentRank period values@(v:_) = fromIntegral (length (filter (\x -> x < v) $ take period values)) / fromIntegral (length (take period values))
+percentRank _ [] = 0
 

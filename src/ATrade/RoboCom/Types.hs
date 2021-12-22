@@ -10,7 +10,8 @@ module ATrade.RoboCom.Types (
   Timeframe(..),
   tfSeconds,
   Ticker(..),
-  Bars
+  Bars,
+  InstrumentParameters(..)
 ) where
 
 import           ATrade.Types
@@ -19,9 +20,6 @@ import           Data.Aeson.Types
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Map.Strict     as M
 import qualified Data.Text           as T
-import qualified Data.Text.Lazy      as TL
-import           Data.Time.Clock
-import           Text.Read           hiding (String)
 
 newtype Timeframe =
   Timeframe Integer deriving (Show, Eq)
@@ -29,11 +27,18 @@ newtype Timeframe =
 tfSeconds :: (Num a) => Timeframe -> a
 tfSeconds (Timeframe s) = fromInteger s
 
+data InstrumentParameters =
+  InstrumentParameters {
+    ipLotSize  :: Int,
+    ipTickSize :: Price
+  } deriving (Show, Eq)
+
 data BarSeries =
   BarSeries {
     bsTickerId  :: TickerId,
     bsTimeframe :: Timeframe,
-    bsBars      :: [Bar]
+    bsBars      :: [Bar],
+    bsParams    :: InstrumentParameters
   } deriving (Show, Eq)
 
 -- | Ticker description record

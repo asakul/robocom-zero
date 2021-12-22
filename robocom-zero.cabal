@@ -1,5 +1,5 @@
 name:                robocom-zero
-version:             0.1.0.0
+version:             0.2.0.0
 -- synopsis:
 -- description:
 homepage:            https://github.com/asakul/robocom-zero#readme
@@ -7,7 +7,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Denis Tereshkin
 maintainer:          denis@kasan.ws
-copyright:           2018 Denis Tereshkin
+copyright:           2021 Denis Tereshkin
 category:            Web
 build-type:          Simple
 extra-source-files:  README.md
@@ -21,15 +21,19 @@ library
                      , ATrade.RoboCom.Positions
                      , ATrade.RoboCom.Types
                      , ATrade.RoboCom.Utils
+                     , ATrade.Quotes
                      , ATrade.Quotes.Finam
-                     , ATrade.Quotes.HAP
                      , ATrade.Quotes.QHP
                      , ATrade.Quotes.QTIS
                      , ATrade.Driver.Real
                      , ATrade.Driver.Backtest
+                     , ATrade.Driver.Junction
+                     , ATrade.Driver.Junction.Types
                      , ATrade.BarAggregator
+                     , ATrade.RoboCom
+  other-modules:       Paths_robocom_zero
   build-depends:       base >= 4.7 && < 5
-                     , libatrade == 0.8.0.0
+                     , libatrade >= 0.9.0.0 && < 0.10.0.0
                      , text
                      , text-icu
                      , errors
@@ -49,7 +53,6 @@ library
                      , binary-ieee754
                      , zeromq4-haskell
                      , unordered-containers
-                     , ether
                      , th-printf
                      , BoundedChan
                      , monad-loops
@@ -63,12 +66,15 @@ library
                      , signal
                      , random
                      , hedis
+                     , gitrev
+                     , data-default
+                     , template-haskell
 
   default-language:    Haskell2010
   other-modules:       ATrade.Exceptions
                      , ATrade.Driver.Real.BrokerClientThread
                      , ATrade.Driver.Real.QuoteSourceThread
-                     , ATrade.Driver.Real.Types
+                     , ATrade.Driver.Types
 
 test-suite robots-test
   type:                exitcode-stdio-1.0
