@@ -51,6 +51,7 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
     setState (f oldState)
   getEnvironment :: m StrategyEnvironment
   getTicker :: TickerId -> BarTimeframe -> m (Maybe BarSeries)
+  getTickerInfo :: TickerId -> m (Maybe InstrumentParameters)
   getAvailableTickers :: m (NonEmpty BarSeriesId)
 
 getFirstTickerId :: forall c s m. (Monad m, MonadRobot m c s) => m BarSeriesId

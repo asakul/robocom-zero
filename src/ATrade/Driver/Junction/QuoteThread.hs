@@ -36,7 +36,8 @@ import           ATrade.RoboCom.Types                        (Bar (barSecurity),
                                                               BarSeries (..),
                                                               BarSeriesId (BarSeriesId),
                                                               Bars,
-                                                              InstrumentParameters (InstrumentParameters))
+                                                              InstrumentParameters (InstrumentParameters),
+                                                              TickerInfoMap)
 import           ATrade.Types                                (BarTimeframe (BarTimeframe),
                                                               ClientSecurityParams (ClientSecurityParams),
                                                               Tick (security),
@@ -78,7 +79,7 @@ data QuoteThreadEnv =
     bars        :: IORef Bars,
     endpoints   :: IORef (HM.HashMap QuoteSubscription [BoundedChan QuoteData]),
     qsclient    :: QuoteSourceClientHandle,
-    paramsCache :: IORef (M.Map TickerId InstrumentParameters),
+    paramsCache :: IORef TickerInfoMap,
     downloaderChan :: BoundedChan QuoteSubscription
   }
 
@@ -88,17 +89,18 @@ startQuoteThread :: (MonadIO m,
                      HistoryProvider m1,
                      TickerInfoProvider m1) =>
   IORef Bars ->
+  IORef TickerInfoMap ->
   Context ->
   T.Text ->
   ClientSecurityParams ->
   (m1 () -> IO ()) ->
   LogAction IO Message ->
   m QuoteThreadHandle
-startQuoteThread barsRef ctx ep secparams downloadThreadRunner logger = do
+startQuoteThread barsRef tiRef ctx ep secparams downloadThreadRunner logger = do
   chan <- liftIO $ newBoundedChan 2000
   dChan <- liftIO $ newBoundedChan 2000
   qsc <- liftIO $ startQuoteSourceClient chan [] ctx ep secparams logger
-  env <- liftIO $ QuoteThreadEnv barsRef <$> newIORef HM.empty <*> pure qsc <*> newIORef M.empty <*> pure dChan
+  env <- liftIO $ QuoteThreadEnv barsRef <$> newIORef HM.empty <*> pure qsc <*> pure tiRef <*> pure dChan
   tid <- liftIO . forkIO $ quoteThread env chan
   downloaderTid <- liftIO . forkIO $ downloadThreadRunner (downloaderThread env dChan)
   return $ QuoteThreadHandle tid downloaderTid env
@@ -119,7 +121,9 @@ startQuoteThread barsRef ctx ep secparams downloadThreadRunner logger = do
         Nothing -> case mbParams of
           Just params -> do
             now <- liftIO getCurrentTime
-            barsData <- getHistory tickerid tf ((-86400 * 60) `addUTCTime` now) now
+            -- Load data in interval [today - 60days; today + 1day]. +1 day guarantees that we will download data up until current time.
+            -- If we don't make this adjustment it is possible that we will get data only up to beginning of current day.
+            barsData <- getHistory tickerid tf ((-86400 * 60) `addUTCTime` now) (86400 `addUTCTime` now)
             let barSeries = BarSeries tickerid tf barsData params
             liftIO $ atomicModifyIORef' (bars env) (\m -> (M.insert (BarSeriesId tickerid tf) barSeries m, ()))
           _ -> return () -- TODO log
@@ -200,12 +204,21 @@ instance TickerInfoProvider DownloaderM where
                      (fromInteger $ tiLotSize ti)
                      (tiTickSize ti)
 
-withQThread :: DownloaderEnv -> IORef Bars -> ProgramConfiguration -> Context -> LogAction IO Message -> (QuoteThreadHandle -> IO ()) -> IO ()
-withQThread env barsMap cfg ctx logger f = do
+withQThread ::
+     DownloaderEnv
+  -> IORef Bars
+  -> IORef TickerInfoMap
+  -> ProgramConfiguration
+  -> Context
+  -> LogAction IO Message
+  -> (QuoteThreadHandle -> IO ())
+  -> IO ()
+withQThread env barsMap tiMap cfg ctx logger f = do
     securityParameters <- loadSecurityParameters
     bracket
       (startQuoteThread
           barsMap
+          tiMap
           ctx
           (quotesourceEndpoint cfg)
           securityParameters

@@ -37,7 +37,7 @@ import           ATrade.RoboCom.Monad                 (Event (NewBar, NewTick, N
                                                        StrategyEnvironment (StrategyEnvironment, _seInstanceId, _seLastTimestamp))
 import           ATrade.RoboCom.Persistence           (MonadPersistence)
 import           ATrade.RoboCom.Types                 (BarSeriesId (BarSeriesId),
-                                                       Bars)
+                                                       Bars, TickerInfoMap)
 import           ATrade.Types                         (Order (orderId), OrderId,
                                                        OrderState, Trade)
 import           Colog                                (HasLog (getLogAction, setLogAction),
@@ -139,6 +139,7 @@ data RobotEnv c s =
     configRef     :: IORef c,
     timersRef     :: IORef [UTCTime],
     bars          :: IORef Bars,
+    tickerInfoMap :: IORef TickerInfoMap,
     env           :: IORef StrategyEnvironment,
     logAction     :: LogAction (RobotM c s) Message,
     brokerService :: Bro.BrokerService,
@@ -182,6 +183,10 @@ instance MonadRobot (RobotM c s) c s where
   getTicker tid tf = do
     b <- asks bars >>= liftIO . readIORef
     return $ M.lookup (BarSeriesId tid tf) b
+
+  getTickerInfo tid = do
+    b <- asks tickerInfoMap >>= liftIO . readIORef
+    return $ M.lookup tid b
 
   getAvailableTickers = asks tickers
 

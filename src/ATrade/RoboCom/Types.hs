@@ -11,6 +11,7 @@ module ATrade.RoboCom.Types (
   BarSeries(..),
   Ticker(..),
   Bars,
+  TickerInfoMap,
   InstrumentParameters(..),
   bsidTickerId
 ) where
@@ -30,6 +31,8 @@ data InstrumentParameters =
     ipLotSize  :: Int,
     ipTickSize :: Price
   } deriving (Show, Eq)
+
+type TickerInfoMap = M.Map TickerId InstrumentParameters
 
 data BarSeries =
   BarSeries {

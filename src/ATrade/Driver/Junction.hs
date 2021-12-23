@@ -52,7 +52,7 @@ import           ATrade.RoboCom.ConfigStorage                (ConfigStorage (loa
 import           ATrade.RoboCom.Monad                        (StrategyEnvironment (..))
 import           ATrade.RoboCom.Persistence                  (MonadPersistence (loadState, saveState))
 import           ATrade.RoboCom.Types                        (BarSeriesId (BarSeriesId),
-                                                              Bars)
+                                                              Bars, TickerInfoMap)
 import           ATrade.Types                                (ClientSecurityParams (ClientSecurityParams),
                                                               OrderId,
                                                               Trade (tradeOrderId))
@@ -192,6 +192,7 @@ junctionMain descriptors = do
     let log = logWith (logger h)
 
     barsMap <- newIORef M.empty
+    tickerInfoMap <- newIORef M.empty
 
     log Info "Junction" $ "Connecting to redis: " <> redisSocket cfg
     redis <- checkedConnect (defaultConnectInfo { connectPort = UnixSocket (T.unpack $ redisSocket cfg) })
@@ -204,7 +205,7 @@ junctionMain descriptors = do
       ordersMap <- newIORef M.empty
       handledNotifications <- newIORef S.empty
       withBroker cfg ctx robotsMap ordersMap handledNotifications (logger h) $ \bro ->
-        withQThread downloaderEnv barsMap cfg ctx (logger h) $ \qt -> do
+        withQThread downloaderEnv barsMap tickerInfoMap cfg ctx (logger h) $ \qt -> do
           broService <- mkBrokerService bro ordersMap
           let junctionLogAction = logger h
           let env =
@@ -218,7 +219,7 @@ junctionMain descriptors = do
                   peLogAction = junctionLogAction
                 }
           withJunction env $ do
-            startRobots h cfg barsMap broService
+            startRobots h cfg barsMap tickerInfoMap broService
             forever $ do
               notifications <- liftIO $ getNotifications broService
               forM_ notifications (liftIO . handleBrokerNotification robotsMap ordersMap handledNotifications (logger h))
@@ -237,8 +238,8 @@ junctionMain descriptors = do
       currentTimers <- liftIO $ readIORef (strategyTimers inst)
       saveState currentTimers (strategyInstanceId inst <> ":timers")
 
-    startRobots :: Handle -> ProgramConfiguration -> IORef Bars -> BrokerService -> JunctionM ()
-    startRobots logHandle cfg barsMap broService = forM_ (instances cfg) $ \inst -> do
+    startRobots :: Handle -> ProgramConfiguration -> IORef Bars -> IORef TickerInfoMap -> BrokerService -> JunctionM ()
+    startRobots logHandle cfg barsMap tickerInfoMap broService = forM_ (instances cfg) $ \inst -> do
       now <- liftIO getCurrentTime
       case M.lookup (strategyBaseName inst) descriptors of
         Just (StrategyDescriptorE desc) -> do
@@ -258,7 +259,8 @@ junctionMain descriptors = do
                                _seVolume = 1,
                                _seLastTimestamp = now
                              }
-              let robotEnv = RobotEnv rState rConf rTimers barsMap stratEnv robotLogAction broService (toBarSeriesId <$> (firstTicker :| restTickers))
+              let robotEnv =
+                    RobotEnv rState rConf rTimers barsMap tickerInfoMap stratEnv robotLogAction broService (toBarSeriesId <$> (firstTicker :| restTickers))
               robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState rTimers
               robotsMap' <- asks peRobots
               liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
