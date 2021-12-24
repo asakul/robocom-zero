@@ -1,3 +1,4 @@
+{-# LANGUAGE DataKinds         #-}
 {-# LANGUAGE DeriveGeneric     #-}
 {-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE MultiWayIf        #-}
@@ -8,13 +9,14 @@
 {-|
  - Module       : ATrade.RoboCom.Combinators
  - Description  : Reusable behavioural components of strategies
- - Copyright    : (c) Denis Tereshkin 2016
- - License      : Proprietary
+ - Copyright    : (c) Denis Tereshkin 2021
+ - License      : BSD 3-clause
  - Maintainer   : denis@kasan.ws
  - Stability    : experimental
  - Portability  : POSIX
  -
- - A lot of behaviour is common for most of the strategies. This module contains those common blocks which can be composed to avoid boilerplate in main strategy code.
+ - A lot of behaviour is common for most of the strategies.
+ - This module contains those common blocks which can be composed to avoid boilerplate in main strategy code.
  -}
 
 module ATrade.RoboCom.Positions
@@ -64,7 +66,10 @@ module ATrade.RoboCom.Positions
   setLimitStopLoss,
   setTakeProfit,
   setStopLossAndTakeProfit,
-  handlePositions
+
+  handlePositions,
+  calculateSizeIVS,
+  calculateSizeFixed
 ) where
 
 import           GHC.Generics
@@ -76,14 +81,15 @@ import           ATrade.Types
 import           Control.Lens
 import           Control.Monad
 
-import           ATrade.Logging       (Severity (Trace, Warning))
-import           ATrade.RoboCom.Monad (MonadRobot (getAvailableTickers))
+import           ATrade.Logging            (Severity (Trace, Warning))
+import qualified ATrade.RoboCom.Indicators as I
 import           Data.Aeson
-import qualified Data.List            as L
-import qualified Data.List.NonEmpty   as NE
-import qualified Data.Text            as T
-import qualified Data.Text.Lazy       as TL
+import qualified Data.List                 as L
+import qualified Data.List.NonEmpty        as NE
+import qualified Data.Text                 as T
+import qualified Data.Text.Lazy            as TL
 import           Data.Time.Clock
+import           GHC.Records               (HasField (..))
 
 data PositionState = PositionWaitingOpenSubmission Order
   | PositionWaitingOpen
@@ -148,8 +154,19 @@ modifyPositions f = do
 class ParamsSize a where
   getPositionSize :: a -> BarSeries -> Int
 
-class ParamsHasMainTicker a where
-  mainTicker :: a -> (BarTimeframe, TickerId)
+calculateSizeIVS :: (HasField "riskSize" a Double,
+                     HasField "stopSize" a Double,
+                     HasField "atrPeriod" a Int) =>
+  a -> BarSeries -> Int
+
+calculateSizeIVS cfg series =
+  let atr = I.atr (getField @"atrPeriod" cfg) (bsBars series) in
+    truncate ((getField @"riskSize" cfg) / (atr * getField @"stopSize" cfg))
+
+calculateSizeFixed :: (HasField "positionSize" a Int) =>
+  a -> BarSeries -> Int
+
+calculateSizeFixed cfg _ = getField @"positionSize" cfg
 
 -- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements intact.
 findAndModify :: (a -> Bool) -> (a -> a) -> [a] -> [a]
@@ -532,7 +549,8 @@ enterAtLimitForTicker (BarSeriesId tid tf) operationSignalName price operation =
     Just series -> do
       cfg <- getConfig
       let quantity = getPositionSize cfg series
-      enterAtLimitForTickerWithParams tid (fromIntegral $ unBarTimeframe tf) acc quantity (SignalId inst operationSignalName "") price operation
+      let roundedPrice = roundTo (ipTickSize . bsParams $ series) price
+      enterAtLimitForTickerWithParams tid (fromIntegral $ unBarTimeframe tf) acc quantity (SignalId inst operationSignalName "") roundedPrice operation
     Nothing -> rejectedPosition
 
 enterAtLimitForTickerWithParams ::
