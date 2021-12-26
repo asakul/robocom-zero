@@ -241,6 +241,7 @@ junctionMain descriptors = do
     startRobots :: Handle -> ProgramConfiguration -> IORef Bars -> IORef TickerInfoMap -> BrokerService -> JunctionM ()
     startRobots logHandle cfg barsMap tickerInfoMap broService = forM_ (instances cfg) $ \inst -> do
       now <- liftIO getCurrentTime
+      logWith (logger logHandle) Info "Junction" $ "Starting strategy: " <> (strategyBaseName inst)
       case M.lookup (strategyBaseName inst) descriptors of
         Just (StrategyDescriptorE desc) -> do
           bigConf <- loadConfig (configKey inst)
@@ -265,7 +266,7 @@ junctionMain descriptors = do
               robotsMap' <- asks peRobots
               liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
             _ -> logWith (logger logHandle) Error (strategyId inst) $ "No tickers configured !!!"
-        Nothing   -> error "Unknown strategy"
+        Nothing   -> logWith (logger logHandle) Error "Junction" $ "Unknown strategy: " <> (strategyBaseName inst)
 
     toBarSeriesId t = BarSeriesId (tickerId t) (timeframe t)
 
