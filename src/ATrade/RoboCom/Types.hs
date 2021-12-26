@@ -13,7 +13,8 @@ module ATrade.RoboCom.Types (
   Bars,
   TickerInfoMap,
   InstrumentParameters(..),
-  bsidTickerId
+  bsidTickerId,
+  barSeriesId
 ) where
 
 import           ATrade.Types
@@ -41,6 +42,9 @@ data BarSeries =
     bsBars      :: [Bar],
     bsParams    :: InstrumentParameters
   } deriving (Show, Eq)
+
+barSeriesId :: BarSeries -> BarSeriesId
+barSeriesId s = BarSeriesId (bsTickerId s) (bsTimeframe s)
 
 -- | Ticker description record
 data Ticker = Ticker {

@@ -20,7 +20,9 @@ module ATrade.RoboCom.Monad (
   also,
   t,
   st,
-  getFirstTickerId) where
+  getFirstTickerId,
+  getTickerAnyTimeframe
+  ) where
 
 import           ATrade.RoboCom.Types
 import           ATrade.Types
@@ -30,6 +32,7 @@ import           Data.Aeson.Types
 import qualified Data.Text                 as T
 import qualified Data.Text.Lazy            as TL
 import           Data.Time.Clock
+import qualified Data.List as L
 import           Language.Haskell.Printf
 import           Language.Haskell.TH.Quote (QuasiQuoter)
 import ATrade.Logging (Severity)
@@ -56,6 +59,14 @@ class (Monad m) => MonadRobot m c s | m -> c, m -> s where
 
 getFirstTickerId :: forall c s m. (Monad m, MonadRobot m c s) => m BarSeriesId
 getFirstTickerId = NE.head <$> getAvailableTickers
+
+getTickerAnyTimeframe :: forall c s m. (Monad m, MonadRobot m c s) => TickerId -> m (Maybe BarSeries)
+getTickerAnyTimeframe requestedTickerId = do
+  tickers <- getAvailableTickers
+  case L.find (\(BarSeriesId tid _) -> tid == requestedTickerId) tickers of
+    Just (BarSeriesId tid tf) -> getTicker tid tf
+    Nothing -> return Nothing
+
 
 st :: QuasiQuoter
 st = t

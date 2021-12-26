@@ -69,7 +69,10 @@ module ATrade.RoboCom.Positions
 
   handlePositions,
   calculateSizeIVS,
-  calculateSizeFixed
+  calculateSizeIVSWith,
+  calculateSizeFixed,
+  calculateSizeFixedCash,
+  calculateSizeFixedCashWith
 ) where
 
 import           GHC.Generics
@@ -152,21 +155,37 @@ modifyPositions f = do
   modifyState (\s -> setPositions s (f pos))
 
 class ParamsSize a where
-  getPositionSize :: a -> BarSeries -> Int
+  getPositionSize :: a -> BarSeries -> Operation -> Int
 
 calculateSizeIVS :: (HasField "riskSize" a Double,
                      HasField "stopSize" a Double,
                      HasField "atrPeriod" a Int) =>
-  a -> BarSeries -> Int
+  a -> BarSeries -> Operation -> Int
 
-calculateSizeIVS cfg series =
-  let atr = I.atr (getField @"atrPeriod" cfg) (bsBars series) in
-    truncate ((getField @"riskSize" cfg) / (atr * getField @"stopSize" cfg))
+calculateSizeIVS cfg = calculateSizeIVSWith (getField @"atrPeriod" cfg) (getField @"riskSize" cfg) (getField @"stopSize" cfg) cfg
+
+calculateSizeIVSWith :: Int -> Double -> Double -> a -> BarSeries -> Operation -> Int
+calculateSizeIVSWith atrPeriod riskSize stopSize cfg series _ =
+  let atr = I.atr atrPeriod (bsBars series) in
+    truncate (riskSize / (atr * stopSize))
 
 calculateSizeFixed :: (HasField "positionSize" a Int) =>
-  a -> BarSeries -> Int
+  a -> BarSeries -> Operation -> Int
 
-calculateSizeFixed cfg _ = getField @"positionSize" cfg
+calculateSizeFixed cfg _ _ = getField @"positionSize" cfg
+
+calculateSizeFixedCash :: ( HasField "totalCash" a Double,
+                            HasField "maxPositions" a Int) =>
+                          a -> BarSeries -> Operation -> Int
+calculateSizeFixedCash cfg = calculateSizeFixedCashWith (getField @"totalCash" cfg) (getField @"maxPositions" cfg) cfg
+
+calculateSizeFixedCashWith :: Double -> Int -> a -> BarSeries -> Operation -> Int
+calculateSizeFixedCashWith totalCash maxPositions cfg series _ =
+  case bsBars $ series of
+    (lastBar:_) ->
+      let cashPerPosition = totalCash / fromIntegral maxPositions in
+        truncate (cashPerPosition / (fromIntegral $ ipLotSize . bsParams $ series))
+    _ -> 0
 
 -- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements intact.
 findAndModify :: (a -> Bool) -> (a -> a) -> [a] -> [a]
@@ -514,7 +533,7 @@ enterAtMarketForTicker operationSignalName (BarSeriesId tid tf) operation = do
     Just series -> do
       env <- getEnvironment
       cfg <- getConfig
-      let quantity = getPositionSize cfg series
+      let quantity = getPositionSize cfg series operation
       enterAtMarketWithParams (env ^. seAccount) tid quantity (SignalId (env ^. seInstanceId) operationSignalName "") operation
     Nothing -> do
       appendToLog Warning $ "Unable to get ticker series: " <> TL.fromStrict tid
@@ -548,7 +567,7 @@ enterAtLimitForTicker (BarSeriesId tid tf) operationSignalName price operation =
   case maybeSeries of
     Just series -> do
       cfg <- getConfig
-      let quantity = getPositionSize cfg series
+      let quantity = getPositionSize cfg series operation
       let roundedPrice = roundTo (ipTickSize . bsParams $ series) price
       enterAtLimitForTickerWithParams tid (fromIntegral $ unBarTimeframe tf) acc quantity (SignalId inst operationSignalName "") roundedPrice operation
     Nothing -> rejectedPosition
