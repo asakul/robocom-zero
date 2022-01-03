@@ -23,6 +23,7 @@ data ProgramConfiguration =
     brokerNotificationEndpoint :: T.Text,
     brokerServerCert           :: Maybe FilePath,
     brokerClientCert           :: Maybe FilePath,
+    brokerIdentity             :: T.Text,
     quotesourceEndpoint        :: T.Text,
     quotesourceServerCert      :: Maybe FilePath,
     quotesourceClientCert      :: Maybe FilePath,

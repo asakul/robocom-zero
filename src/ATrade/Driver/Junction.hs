@@ -61,7 +61,7 @@ import           Colog                                       (HasLog (getLogActi
                                                               logTextStdout,
                                                               (>$<))
 import           Colog.Actions                               (logTextHandle)
-import           Control.Concurrent                          (threadDelay)
+import           Control.Concurrent                          (threadDelay, QSem, waitQSem, signalQSem)
 import           Control.Exception.Safe                      (MonadThrow,
                                                               bracket)
 import           Control.Monad                               (forM_, forever)
@@ -305,7 +305,7 @@ junctionMain descriptors = do
       securityParameters <- loadBrokerSecurityParameters cfg
       bracket
         (startBrokerClient
-          "broker"
+          (encodeUtf8 $ brokerIdentity cfg)
           ctx
           (brokerEndpoint cfg)
           (brokerNotificationEndpoint cfg)
