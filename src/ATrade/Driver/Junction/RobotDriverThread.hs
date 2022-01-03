@@ -39,7 +39,7 @@ import           ATrade.RoboCom.Persistence           (MonadPersistence)
 import           ATrade.RoboCom.Types                 (BarSeriesId (BarSeriesId),
                                                        Bars, TickerInfoMap)
 import           ATrade.Types                         (Order (orderId), OrderId,
-                                                       OrderState, Trade)
+                                                       OrderState, Trade, Tick (value))
 import           Colog                                (HasLog (getLogAction, setLogAction),
                                                        LogAction)
 import           Control.Concurrent                   (ThreadId, forkIO)
@@ -47,7 +47,7 @@ import           Control.Concurrent.BoundedChan       (BoundedChan,
                                                        newBoundedChan, readChan,
                                                        writeChan)
 import           Control.Exception.Safe               (MonadThrow)
-import           Control.Monad                        (forM_, forever, void)
+import           Control.Monad                        (forM_, forever, void, when)
 import           Control.Monad.IO.Class               (MonadIO, liftIO)
 import           Control.Monad.Reader                 (MonadReader (local),
                                                        ReaderT, asks)
@@ -87,7 +87,7 @@ robotDriverThread inst eventQueue =
     handleEvent (EventRequest _)           = return ()
     handleEvent (QuoteEvent d) =
       case d of
-        QDTick tick     -> strategyEventCallback inst (NewTick tick)
+        QDTick tick     -> when (value tick /= 0) $ strategyEventCallback inst (NewTick tick)
         QDBar (tf, bar) -> strategyEventCallback inst (NewBar (tf, bar))
     handleEvent (NewTradeEvent trade)      = strategyEventCallback inst (NewTrade trade)
     handleEvent (OrderEvent oid newState)  = strategyEventCallback inst (OrderUpdate oid newState)
