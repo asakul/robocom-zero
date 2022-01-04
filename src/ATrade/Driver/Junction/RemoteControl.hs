@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts  #-}
 {-# LANGUAGE MultiWayIf        #-}
 {-# LANGUAGE OverloadedStrings #-}
 
@@ -6,21 +7,28 @@ module ATrade.Driver.Junction.RemoteControl
     handleRemoteControl
   ) where
 
-import           ATrade.Driver.Junction.JunctionMonad (JunctionEnv (peLogAction, peRemoteControlSocket, peRobots),
-                                                       JunctionM)
-import           ATrade.Driver.Junction.Types         (StrategyInstanceDescriptor)
-import           ATrade.Logging                       (logErrorWith)
-import           Control.Monad                        (unless)
-import           Control.Monad.Reader                 (asks)
-import           Data.Aeson                           (decode)
-import qualified Data.ByteString                      as B
-import qualified Data.ByteString.Lazy                 as BL
-import qualified Data.Map.Strict                      as M
-import qualified Data.Text                            as T
-import           Data.Text.Encoding                   (decodeUtf8', encodeUtf8)
-import           System.ZMQ4                          (Event (In), Poll (Sock),
-                                                       poll, receive, send)
-import           UnliftIO                             (MonadIO (liftIO))
+import           ATrade.Driver.Junction.JunctionMonad     (JunctionEnv (peLogAction, peRemoteControlSocket, peRobots),
+                                                           JunctionM)
+import           ATrade.Driver.Junction.RobotDriverThread (stopRobot)
+import           ATrade.Driver.Junction.Types             (StrategyInstanceDescriptor)
+import           ATrade.Logging                           (Severity (Info),
+                                                           logErrorWith,
+                                                           logWith)
+import           Control.Monad                            (unless)
+import           Control.Monad.Reader                     (asks)
+import           Data.Aeson                               (decode)
+import qualified Data.ByteString                          as B
+import qualified Data.ByteString.Lazy                     as BL
+import qualified Data.Map.Strict                          as M
+import qualified Data.Text                                as T
+import           Data.Text.Encoding                       (decodeUtf8',
+                                                           encodeUtf8)
+import           System.ZMQ4                              (Event (In),
+                                                           Poll (Sock), poll,
+                                                           receive, send)
+import           UnliftIO                                 (MonadIO (liftIO),
+                                                           atomicModifyIORef',
+                                                           readIORef)
 
 data RemoteControlResponse =
     ResponseOk
@@ -89,7 +97,18 @@ handleRemoteControl timeout = do
         liftIO $ send sock [] (makeRemoteControlResponse response)
   where
     handleRequest (StartRobot inst)          = undefined
-    handleRequest (StopRobot instId)         = undefined
+    handleRequest (StopRobot instId)         = do
+      robotsRef <- asks peRobots
+      robots <- readIORef robotsRef
+      case M.lookup instId robots of
+        Just robot -> do
+          logger <- asks peLogAction
+          logWith logger Info "RemoteControl" $ "Stopping robot: " <> instId
+          stopRobot robot
+          liftIO $ atomicModifyIORef' robotsRef (\r -> (M.delete instId r, ()))
+          return ResponseOk
+        Nothing    -> return $ ResponseError $ "Not started: " <> instId
+
     handleRequest (ReloadConfig instId)      = undefined
     handleRequest (SetState instId rawState) = undefined
     handleRequest Ping                       = return ResponseOk

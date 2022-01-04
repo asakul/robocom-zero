@@ -13,12 +13,14 @@ module ATrade.Driver.Junction.RobotDriverThread
   RobotM(..),
   RobotDriverHandle,
   onStrategyInstance,
-  postNotificationEvent) where
+  postNotificationEvent,
+  stopRobot
+  ) where
 
 import           ATrade.Broker.Protocol               (Notification (OrderNotification, TradeNotification))
 import qualified ATrade.Driver.Junction.BrokerService as Bro
-import           ATrade.Driver.Junction.QuoteStream   (QuoteStream (addSubscription),
-                                                       QuoteSubscription (QuoteSubscription))
+import           ATrade.Driver.Junction.QuoteStream   (QuoteStream (addSubscription, removeSubscription),
+                                                       QuoteSubscription (QuoteSubscription), SubscriptionId)
 import           ATrade.Driver.Junction.Types         (BigConfig,
                                                        StrategyDescriptor,
                                                        StrategyInstance (StrategyInstance, strategyEventCallback),
@@ -28,31 +30,29 @@ import           ATrade.Driver.Junction.Types         (BigConfig,
                                                        eventCallback, stateKey,
                                                        strategyId, tickerId,
                                                        timeframe)
-import           ATrade.Logging                       (Message, log, logDebug,
-                                                       logInfo, logWarning)
+import           ATrade.Logging                       (Message, log)
 import           ATrade.QuoteSource.Client            (QuoteData (..))
 import           ATrade.RoboCom.ConfigStorage         (ConfigStorage)
-import           ATrade.RoboCom.Monad                 (Event (NewBar, NewTick, NewTrade, OrderSubmitted, OrderUpdate),
-                                                       MonadRobot (..),
-                                                       StrategyEnvironment (StrategyEnvironment, _seInstanceId, _seLastTimestamp))
+import           ATrade.RoboCom.Monad                 (Event (NewBar, NewTick, NewTrade, OrderUpdate),
+                                                       MonadRobot (..), StrategyEnvironment (..))
 import           ATrade.RoboCom.Persistence           (MonadPersistence)
 import           ATrade.RoboCom.Types                 (BarSeriesId (BarSeriesId),
                                                        Bars, TickerInfoMap)
-import           ATrade.Types                         (Order (orderId), OrderId,
+import           ATrade.Types                         (OrderId,
                                                        OrderState, Trade, Tick (value))
 import           Colog                                (HasLog (getLogAction, setLogAction),
                                                        LogAction)
-import           Control.Concurrent                   (ThreadId, forkIO)
+import           Control.Concurrent                   (ThreadId, forkIO, killThread)
 import           Control.Concurrent.BoundedChan       (BoundedChan,
                                                        newBoundedChan, readChan,
                                                        writeChan)
 import           Control.Exception.Safe               (MonadThrow)
-import           Control.Monad                        (forM_, forever, void, when)
+import           Control.Monad                        (forM_, forever, void, when, forM)
 import           Control.Monad.IO.Class               (MonadIO, liftIO)
 import           Control.Monad.Reader                 (MonadReader (local),
                                                        ReaderT, asks)
 import           Data.Aeson                           (FromJSON, ToJSON)
-import           Data.Default
+import Data.Default ( Default )
 import           Data.IORef                           (IORef,
                                                        atomicModifyIORef',
                                                        readIORef, writeIORef)
@@ -64,7 +64,7 @@ import           Dhall                                (FromDhall)
 import           Prelude                              hiding (log)
 
 data RobotDriverHandle = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) =>
-                           RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent)
+                           RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent) [SubscriptionId]
 
 data RobotDriverRequest
 
@@ -118,19 +118,25 @@ createRobotDriverThread instDesc strDesc runner bigConf rConf rState rTimers = d
   let inst = StrategyInstance (strategyId instDesc) (eventCallback strDesc) rState rConf rTimers
 
   quoteQueue <- liftIO $ newBoundedChan 2000
-  forM_ (confTickers bigConf) (\x -> addSubscription (QuoteSubscription (tickerId x) (timeframe x)) quoteQueue)
+  subIds <- forM (confTickers bigConf) (\x -> addSubscription (QuoteSubscription (tickerId x) (timeframe x)) quoteQueue)
   qthread <- liftIO . forkIO $ forever $ passQuoteEvents eventQueue quoteQueue
 
   driver <- liftIO . forkIO $ runner  $ robotDriverThread inst eventQueue
-  return $ RobotDriverHandle inst driver qthread eventQueue
+  return $ RobotDriverHandle inst driver qthread eventQueue subIds
 
   where
     passQuoteEvents eventQueue quoteQueue = do
       v <- readChan quoteQueue
       writeChan eventQueue (QuoteEvent v)
 
+stopRobot :: (MonadIO m, QuoteStream m) => RobotDriverHandle -> m ()
+stopRobot (RobotDriverHandle _ driver qthread _ subIds) = do
+  forM_ subIds removeSubscription
+  liftIO $ killThread driver
+  liftIO $ killThread qthread
+
 onStrategyInstance :: RobotDriverHandle -> forall r. (forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyInstance c s -> r) -> r
-onStrategyInstance (RobotDriverHandle inst _ _ _) f = f inst
+onStrategyInstance (RobotDriverHandle inst _ _ _ _) f = f inst
 
 data RobotEnv c s =
   RobotEnv
@@ -191,7 +197,7 @@ instance MonadRobot (RobotM c s) c s where
   getAvailableTickers = asks tickers
 
 postNotificationEvent :: (MonadIO m) => RobotDriverHandle -> Notification -> m ()
-postNotificationEvent (RobotDriverHandle _ _ _ eventQueue) notification = liftIO $
+postNotificationEvent (RobotDriverHandle _ _ _ eventQueue _) notification = liftIO $
   case notification of
     OrderNotification _ oid state -> writeChan eventQueue (OrderEvent oid state)
     TradeNotification _ trade -> writeChan eventQueue (NewTradeEvent trade)

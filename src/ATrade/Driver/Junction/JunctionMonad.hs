@@ -141,7 +141,9 @@ instance QuoteStream JunctionM where
   addSubscription (QuoteSubscription ticker tf) chan = do
     qt <- asks peQuoteThread
     QT.addSubscription qt ticker tf chan
-  removeSubscription _ = undefined
+  removeSubscription subId = do
+    qt <- asks peQuoteThread
+    QT.removeSubscription qt subId
 
 startRobot :: LogAction IO Message -> ProgramConfiguration -> IORef Bars -> IORef TickerInfoMap ->
   BrokerService -> M.Map T.Text StrategyDescriptorE -> StrategyInstanceDescriptor -> JunctionM ()
