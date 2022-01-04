@@ -53,6 +53,7 @@ import           Colog                                       (HasLog (getLogActi
                                                               logTextHandle,
                                                               (>$<))
 import           Control.Exception.Safe                      (MonadThrow)
+import           Control.Exception.Safe                      (finally)
 import           Control.Monad.Reader                        (MonadIO (liftIO),
                                                               MonadReader,
                                                               ReaderT (runReaderT),
@@ -82,7 +83,10 @@ import           System.IO                                   (BufferMode (LineBu
                                                               IOMode (AppendMode),
                                                               hSetBuffering,
                                                               openFile)
+import           System.IO                                   (hClose)
 import           System.ZMQ4                                 (Rep, Socket)
+import           UnliftIO                                    (MonadUnliftIO)
+import           UnliftIO.Exception                          (catchAny)
 
 data JunctionEnv =
   JunctionEnv
@@ -103,7 +107,7 @@ data JunctionEnv =
   }
 
 newtype JunctionM a = JunctionM { unJunctionM :: ReaderT JunctionEnv IO a }
-  deriving (Functor, Applicative, Monad, MonadReader JunctionEnv, MonadIO, MonadThrow)
+  deriving (Functor, Applicative, Monad, MonadReader JunctionEnv, MonadIO, MonadThrow, MonadUnliftIO)
 
 instance HasLog JunctionEnv Message JunctionM where
   getLogAction = peLogAction
@@ -164,7 +168,7 @@ startRobot inst = do
   let lLogger = hoistLogAction liftIO ioLogger
   logWith lLogger Info "Junction" $ "Starting strategy: " <> strategyBaseName inst
   case M.lookup (strategyBaseName inst) descriptors of
-    Just (StrategyDescriptorE desc) -> do
+    Just (StrategyDescriptorE desc) -> flip catchAny (\e -> logWith lLogger Error "Junction" $ "Exception: " <> (T.pack . show $ e)) $ do
       bigConf <- loadConfig (configKey inst)
       case confTickers bigConf of
         (firstTicker:restTickers) -> do
@@ -183,7 +187,7 @@ startRobot inst = do
                          }
           let robotEnv =
                 RobotEnv rState rConf rTimers barsMap tickerInfoMap stratEnv robotLogAction broService (toBarSeriesId <$> (firstTicker :| restTickers))
-          robot <- createRobotDriverThread inst desc (flip runReaderT robotEnv . unRobotM) bigConf rConf rState rTimers
+          robot <- createRobotDriverThread inst desc (\a -> (flip runReaderT robotEnv . unRobotM) a `finally` hClose localH) bigConf rConf rState rTimers
           robotsMap' <- asks peRobots
           liftIO $ atomicModifyIORef' robotsMap' (\s -> (M.insert (strategyId inst) robot s, ()))
         _ -> logWith lLogger Error (strategyId inst) "No tickers configured !!!"
