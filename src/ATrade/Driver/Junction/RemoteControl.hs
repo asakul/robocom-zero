@@ -9,6 +9,7 @@ module ATrade.Driver.Junction.RemoteControl
 
 import           ATrade.Driver.Junction.JunctionMonad     (JunctionEnv (peLogAction, peRemoteControlSocket, peRobots),
                                                            JunctionM,
+                                                           reloadConfig,
                                                            startRobot)
 import           ATrade.Driver.Junction.RobotDriverThread (stopRobot)
 import           ATrade.Driver.Junction.Types             (StrategyInstanceDescriptor)
@@ -112,7 +113,11 @@ handleRemoteControl timeout = do
           return ResponseOk
         Nothing    -> return $ ResponseError $ "Not started: " <> instId
 
-    handleRequest (ReloadConfig instId)      = undefined
+    handleRequest (ReloadConfig instId)      = do
+      res <- reloadConfig instId
+      case res of
+        Left errmsg -> return $ ResponseError errmsg
+        Right ()    -> return ResponseOk
     handleRequest (SetState instId rawState) = undefined
     handleRequest Ping                       = return ResponseOk
 

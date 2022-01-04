@@ -8,7 +8,8 @@ module ATrade.Driver.Junction.JunctionMonad
     JunctionEnv(..),
     JunctionM(..),
     startRobot,
-    saveRobots
+    saveRobots,
+    reloadConfig
   ) where
 
 import           ATrade.Broker.Client                        (BrokerClientHandle)
@@ -22,7 +23,9 @@ import qualified ATrade.Driver.Junction.QuoteThread          as QT
 import           ATrade.Driver.Junction.RobotDriverThread    (RobotDriverHandle, RobotEnv (RobotEnv),
                                                               RobotM (unRobotM),
                                                               createRobotDriverThread,
-                                                              onStrategyInstance)
+                                                              getInstanceDescriptor,
+                                                              onStrategyInstance,
+                                                              onStrategyInstanceM)
 import           ATrade.Driver.Junction.Types                (StrategyDescriptorE (StrategyDescriptorE),
                                                               StrategyInstanceDescriptor,
                                                               accountId,
@@ -31,6 +34,7 @@ import           ATrade.Driver.Junction.Types                (StrategyDescriptor
                                                               configKey,
                                                               stateKey,
                                                               strategyBaseName,
+                                                              strategyConfig,
                                                               strategyId,
                                                               strategyInstanceId,
                                                               strategyState,
@@ -52,7 +56,6 @@ import           Colog                                       (HasLog (getLogActi
                                                               hoistLogAction,
                                                               logTextHandle,
                                                               (>$<))
-import           Control.Exception.Safe                      (MonadThrow)
 import           Control.Exception.Safe                      (finally)
 import           Control.Monad.Reader                        (MonadIO (liftIO),
                                                               MonadReader,
@@ -66,7 +69,8 @@ import           Data.Foldable                               (traverse_)
 import           Data.IORef                                  (IORef,
                                                               atomicModifyIORef',
                                                               newIORef,
-                                                              readIORef)
+                                                              readIORef,
+                                                              writeIORef)
 import           Data.List.NonEmpty                          (NonEmpty ((:|)))
 import qualified Data.Map.Strict                             as M
 import qualified Data.Text                                   as T
@@ -86,7 +90,8 @@ import           System.IO                                   (BufferMode (LineBu
 import           System.IO                                   (hClose)
 import           System.ZMQ4                                 (Rep, Socket)
 import           UnliftIO                                    (MonadUnliftIO)
-import           UnliftIO.Exception                          (catchAny)
+import           UnliftIO.Exception                          (catchAny,
+                                                              onException)
 
 data JunctionEnv =
   JunctionEnv
@@ -107,7 +112,7 @@ data JunctionEnv =
   }
 
 newtype JunctionM a = JunctionM { unJunctionM :: ReaderT JunctionEnv IO a }
-  deriving (Functor, Applicative, Monad, MonadReader JunctionEnv, MonadIO, MonadThrow, MonadUnliftIO)
+  deriving (Functor, Applicative, Monad, MonadReader JunctionEnv, MonadIO, MonadUnliftIO)
 
 instance HasLog JunctionEnv Message JunctionM where
   getLogAction = peLogAction
@@ -207,3 +212,17 @@ saveRobotState handle = onStrategyInstance handle $ \inst -> do
   saveState currentState (strategyInstanceId inst)
   currentTimers <- liftIO $ readIORef (strategyTimers inst)
   saveState currentTimers (strategyInstanceId inst <> ":timers")
+
+reloadConfig :: T.Text -> JunctionM (Either T.Text ())
+reloadConfig instId = flip catchAny (\_ -> return $ Left "Exception") $ do
+  robotsMap' <- asks peRobots
+  robots <- liftIO $ readIORef robotsMap'
+  case M.lookup instId robots of
+    Just robot -> do
+      onStrategyInstanceM robot
+        (\inst -> do
+            let instDesc = getInstanceDescriptor robot
+            bigConf <- loadConfig (configKey instDesc)
+            liftIO $ writeIORef (strategyConfig inst) (confStrategy bigConf))
+      return $ Right ()
+    Nothing -> return $ Left "Unable to load config"

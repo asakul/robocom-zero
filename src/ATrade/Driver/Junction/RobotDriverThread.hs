@@ -13,8 +13,10 @@ module ATrade.Driver.Junction.RobotDriverThread
   RobotM(..),
   RobotDriverHandle,
   onStrategyInstance,
+  onStrategyInstanceM,
   postNotificationEvent,
-  stopRobot
+  stopRobot,
+  getInstanceDescriptor
   ) where
 
 import           ATrade.Broker.Protocol               (Notification (OrderNotification, TradeNotification))
@@ -68,7 +70,7 @@ import           Dhall                                (FromDhall)
 import           Prelude                              hiding (log)
 
 data RobotDriverHandle = forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) =>
-                           RobotDriverHandle (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent) [SubscriptionId]
+                           RobotDriverHandle StrategyInstanceDescriptor (StrategyInstance c s) ThreadId ThreadId (BoundedChan RobotDriverEvent) [SubscriptionId]
 
 data RobotDriverRequest
 
@@ -126,7 +128,7 @@ createRobotDriverThread instDesc strDesc runner bigConf rConf rState rTimers = d
   qthread <- liftIO . forkIO $ forever $ passQuoteEvents eventQueue quoteQueue
 
   driver <- liftIO . forkIO $ runner  $ robotDriverThread inst eventQueue
-  return $ RobotDriverHandle inst driver qthread eventQueue subIds
+  return $ RobotDriverHandle instDesc inst driver qthread eventQueue subIds
 
   where
     passQuoteEvents eventQueue quoteQueue = do
@@ -134,13 +136,17 @@ createRobotDriverThread instDesc strDesc runner bigConf rConf rState rTimers = d
       writeChan eventQueue (QuoteEvent v)
 
 stopRobot :: (MonadIO m, QuoteStream m) => RobotDriverHandle -> m ()
-stopRobot (RobotDriverHandle _ driver qthread _ subIds) = do
+stopRobot (RobotDriverHandle _ _ driver qthread _ subIds) = do
   forM_ subIds removeSubscription
   liftIO $ killThread driver
   liftIO $ killThread qthread
 
 onStrategyInstance :: RobotDriverHandle -> forall r. (forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyInstance c s -> r) -> r
-onStrategyInstance (RobotDriverHandle inst _ _ _ _) f = f inst
+onStrategyInstance (RobotDriverHandle _ inst _ _ _ _) f = f inst
+
+onStrategyInstanceM :: (MonadIO m) => RobotDriverHandle ->
+  (forall c s. (FromDhall c, Default s, FromJSON s, ToJSON s) => StrategyInstance c s -> m r) -> m r
+onStrategyInstanceM (RobotDriverHandle _ inst _ _ _ _) f = f inst
 
 data RobotEnv c s =
   RobotEnv
@@ -201,9 +207,10 @@ instance MonadRobot (RobotM c s) c s where
   getAvailableTickers = asks tickers
 
 postNotificationEvent :: (MonadIO m) => RobotDriverHandle -> Notification -> m ()
-postNotificationEvent (RobotDriverHandle _ _ _ eventQueue _) notification = liftIO $
+postNotificationEvent (RobotDriverHandle _ _ _ _ eventQueue _) notification = liftIO $
   case notification of
     OrderNotification _ oid state -> writeChan eventQueue (OrderEvent oid state)
     TradeNotification _ trade -> writeChan eventQueue (NewTradeEvent trade)
 
-
+getInstanceDescriptor :: RobotDriverHandle -> StrategyInstanceDescriptor
+getInstanceDescriptor (RobotDriverHandle instDesc _ _ _ _ _) = instDesc
