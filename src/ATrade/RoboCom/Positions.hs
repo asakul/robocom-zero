@@ -184,7 +184,7 @@ calculateSizeFixedCashWith totalCash maxPositions cfg series _ =
   case bsBars $ series of
     (lastBar:_) ->
       let cashPerPosition = totalCash / fromIntegral maxPositions in
-        truncate (cashPerPosition / (fromIntegral $ ipLotSize . bsParams $ series))
+        truncate (cashPerPosition / ((toDouble $ barClose lastBar) * (fromIntegral $ ipLotSize . bsParams $ series)))
     _ -> 0
 
 -- | Helper function. Finds first element in list which satisfies predicate 'p' and if found, applies 'm' to it, leaving other elements intact.
