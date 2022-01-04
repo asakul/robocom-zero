@@ -21,6 +21,9 @@ instance Hashable BarTimeframe
 instance Hashable QuoteSubscription
 
 newtype SubscriptionId = SubscriptionId { unSubscriptionId :: Int }
+  deriving (Show, Eq, Generic)
+
+instance Hashable SubscriptionId
 
 class (Monad m) => QuoteStream m where
   addSubscription :: QuoteSubscription -> BoundedChan QuoteData -> m SubscriptionId

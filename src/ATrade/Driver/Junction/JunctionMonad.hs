@@ -138,10 +138,9 @@ instance MonadPersistence JunctionM where
             return def
 
 instance QuoteStream JunctionM where
-  addSubscription (QuoteSubscription ticker timeframe) chan = do
+  addSubscription (QuoteSubscription ticker tf) chan = do
     qt <- asks peQuoteThread
-    QT.addSubscription qt ticker timeframe chan
-    return (SubscriptionId 0) -- TODO subscription Ids
+    QT.addSubscription qt ticker tf chan
   removeSubscription _ = undefined
 
 startRobot :: LogAction IO Message -> ProgramConfiguration -> IORef Bars -> IORef TickerInfoMap ->
