@@ -147,6 +147,7 @@ junctionMain descriptors = do
                     peRobots = robotsMap,
                     peRemoteControlSocket = rcSocket,
                     peLogAction = junctionLogAction,
+                    peIoLogAction = globalLogger,
                     peProgramConfiguration = cfg,
                     peBarsMap = barsMap,
                     peTickerInfoMap = tickerInfoMap,
@@ -154,16 +155,16 @@ junctionMain descriptors = do
                     peDescriptors = descriptors
                   }
             withJunction env $ do
-              startRobots (hoistLogAction liftIO globalLogger) cfg
+              startRobots cfg
               forever $ do
                 notifications <- liftIO $ getNotifications broService
                 forM_ notifications (liftIO . handleBrokerNotification robotsMap ordersMap handledNotifications globalLogger)
                 saveRobots
                 handleRemoteControl 1000000
   where
-    startRobots :: LogAction IO Message -> ProgramConfiguration -> JunctionM ()
-    startRobots gLogger cfg = forM_ (instances cfg) $ \inst -> do
-      startRobot gLogger inst
+    startRobots :: ProgramConfiguration -> JunctionM ()
+    startRobots cfg = forM_ (instances cfg) $ \inst -> do
+      startRobot inst
 
     withJunction :: JunctionEnv -> JunctionM () -> IO ()
     withJunction env = (`runReaderT` env) . unJunctionM

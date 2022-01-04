@@ -94,6 +94,7 @@ data JunctionEnv =
     peRobots               :: IORef (M.Map T.Text RobotDriverHandle),
     peRemoteControlSocket  :: Socket Rep,
     peLogAction            :: LogAction JunctionM Message,
+    peIoLogAction          :: LogAction IO Message,
     peProgramConfiguration :: ProgramConfiguration,
     peBarsMap              :: IORef Bars,
     peTickerInfoMap        :: IORef TickerInfoMap,
@@ -151,8 +152,9 @@ instance QuoteStream JunctionM where
     qt <- asks peQuoteThread
     QT.removeSubscription qt subId
 
-startRobot :: LogAction IO Message -> StrategyInstanceDescriptor -> JunctionM ()
-startRobot ioLogger inst = do
+startRobot :: StrategyInstanceDescriptor -> JunctionM ()
+startRobot inst = do
+  ioLogger <- asks peIoLogAction
   descriptors <- asks peDescriptors
   cfg <- asks peProgramConfiguration
   barsMap <- asks peBarsMap
