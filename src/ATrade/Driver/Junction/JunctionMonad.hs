@@ -76,7 +76,8 @@ import           Data.Time.Clock.POSIX                       (getPOSIXTime)
 import           Database.Redis                              (Connection, get,
                                                               mset, runRedis)
 import           Dhall                                       (auto, input)
-import           Prelude                                     hiding (readFile)
+import           Prelude                                     hiding (log,
+                                                              readFile)
 import           System.IO                                   (BufferMode (LineBuffering),
                                                               IOMode (AppendMode),
                                                               hSetBuffering,
@@ -86,13 +87,18 @@ import           System.ZMQ4                                 (Rep, Socket)
 data JunctionEnv =
   JunctionEnv
   {
-    peRedisSocket         :: Connection,
-    peConfigPath          :: FilePath,
-    peQuoteThread         :: QuoteThreadHandle,
-    peBroker              :: BrokerClientHandle,
-    peRobots              :: IORef (M.Map T.Text RobotDriverHandle),
-    peRemoteControlSocket :: Socket Rep,
-    peLogAction           :: LogAction JunctionM Message
+    peRedisSocket          :: Connection,
+    peConfigPath           :: FilePath,
+    peQuoteThread          :: QuoteThreadHandle,
+    peBroker               :: BrokerClientHandle,
+    peRobots               :: IORef (M.Map T.Text RobotDriverHandle),
+    peRemoteControlSocket  :: Socket Rep,
+    peLogAction            :: LogAction JunctionM Message,
+    peProgramConfiguration :: ProgramConfiguration,
+    peBarsMap              :: IORef Bars,
+    peTickerInfoMap        :: IORef TickerInfoMap,
+    peBrokerService        :: BrokerService,
+    peDescriptors          :: M.Map T.Text StrategyDescriptorE
   }
 
 newtype JunctionM a = JunctionM { unJunctionM :: ReaderT JunctionEnv IO a }
@@ -145,11 +151,13 @@ instance QuoteStream JunctionM where
     qt <- asks peQuoteThread
     QT.removeSubscription qt subId
 
-startRobot :: LogAction IO Message -> ProgramConfiguration -> IORef Bars -> IORef TickerInfoMap ->
-  BrokerService -> M.Map T.Text StrategyDescriptorE -> StrategyInstanceDescriptor -> JunctionM ()
-startRobot ioLogger cfg barsMap tickerInfoMap broService descriptors inst = do
-  logger <- asks peLogAction
-  let log = logWith logger
+startRobot :: LogAction IO Message -> StrategyInstanceDescriptor -> JunctionM ()
+startRobot ioLogger inst = do
+  descriptors <- asks peDescriptors
+  cfg <- asks peProgramConfiguration
+  barsMap <- asks peBarsMap
+  tickerInfoMap <- asks peTickerInfoMap
+  broService <- asks peBrokerService
   now <- liftIO getCurrentTime
   let lLogger = hoistLogAction liftIO ioLogger
   logWith lLogger Info "Junction" $ "Starting strategy: " <> strategyBaseName inst
