@@ -8,7 +8,8 @@ module ATrade.Driver.Junction.RemoteControl
   ) where
 
 import           ATrade.Driver.Junction.JunctionMonad     (JunctionEnv (peLogAction, peRemoteControlSocket, peRobots),
-                                                           JunctionM)
+                                                           JunctionM,
+                                                           startRobot)
 import           ATrade.Driver.Junction.RobotDriverThread (stopRobot)
 import           ATrade.Driver.Junction.Types             (StrategyInstanceDescriptor)
 import           ATrade.Logging                           (Severity (Info),
@@ -96,7 +97,9 @@ handleRemoteControl timeout = do
         response <- handleRequest request
         liftIO $ send sock [] (makeRemoteControlResponse response)
   where
-    handleRequest (StartRobot inst)          = undefined
+    handleRequest (StartRobot inst)          = do
+      startRobot inst
+      return ResponseOk
     handleRequest (StopRobot instId)         = do
       robotsRef <- asks peRobots
       robots <- readIORef robotsRef
