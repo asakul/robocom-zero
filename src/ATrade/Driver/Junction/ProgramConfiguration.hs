@@ -29,6 +29,7 @@ data ProgramConfiguration =
     quotesourceClientCert      :: Maybe FilePath,
     qhpEndpoint                :: T.Text,
     qtisEndpoint               :: T.Text,
+    remoteControlEndpoint      :: T.Text,
     redisSocket                :: T.Text,
     robotsConfigsPath          :: FilePath,
     logBasePath                :: FilePath,

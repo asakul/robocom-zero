@@ -39,6 +39,8 @@ library
                      , ATrade.Quotes.HistoryProvider
                      , ATrade.Quotes.TickerInfoProvider
   other-modules:       Paths_robocom_zero
+                     , ATrade.Driver.Junction.RemoteControl
+                     , ATrade.Driver.Junction.JunctionMonad
   build-depends:       base >= 4.7 && < 5
                      , libatrade >= 0.12.0.0 && < 0.13.0.0
                      , text

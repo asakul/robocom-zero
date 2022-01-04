@@ -1,6 +1,7 @@
 {-# LANGUAGE DeriveGeneric             #-}
 {-# LANGUAGE DuplicateRecordFields     #-}
 {-# LANGUAGE ExistentialQuantification #-}
+{-# LANGUAGE OverloadedStrings         #-}
 {-# LANGUAGE RankNTypes                #-}
 
 module ATrade.Driver.Junction.Types
@@ -16,7 +17,8 @@ module ATrade.Driver.Junction.Types
 
 import           ATrade.RoboCom.Monad (EventCallback)
 import           ATrade.Types         (BarTimeframe (..), TickerId)
-import           Data.Aeson           (FromJSON (..), ToJSON (..))
+import           Data.Aeson           (FromJSON (..), ToJSON (..), withObject,
+                                       (.:))
 import           Data.Default         (Default)
 import           Data.IORef           (IORef)
 import qualified Data.Text            as T
@@ -65,6 +67,17 @@ data StrategyInstanceDescriptor =
   } deriving (Generic, Show)
 
 instance FromDhall StrategyInstanceDescriptor
+
+instance FromJSON StrategyInstanceDescriptor where
+  parseJSON = withObject "StrategyInstanceDescriptor" $ \obj ->
+    StrategyInstanceDescriptor <$>
+    obj .: "account_id" <*>
+    obj .: "strategy_id" <*>
+    obj .: "strategy_base_name" <*>
+    obj .: "config_key" <*>
+    obj .: "state_key" <*>
+    obj .: "log_path"
+
 
 data StrategyInstance c s =
     StrategyInstance
