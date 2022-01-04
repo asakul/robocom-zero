@@ -20,7 +20,8 @@ module ATrade.Driver.Junction.RobotDriverThread
 import           ATrade.Broker.Protocol               (Notification (OrderNotification, TradeNotification))
 import qualified ATrade.Driver.Junction.BrokerService as Bro
 import           ATrade.Driver.Junction.QuoteStream   (QuoteStream (addSubscription, removeSubscription),
-                                                       QuoteSubscription (QuoteSubscription), SubscriptionId)
+                                                       QuoteSubscription (QuoteSubscription),
+                                                       SubscriptionId)
 import           ATrade.Driver.Junction.Types         (BigConfig,
                                                        StrategyDescriptor,
                                                        StrategyInstance (StrategyInstance, strategyEventCallback),
@@ -34,25 +35,28 @@ import           ATrade.Logging                       (Message, log)
 import           ATrade.QuoteSource.Client            (QuoteData (..))
 import           ATrade.RoboCom.ConfigStorage         (ConfigStorage)
 import           ATrade.RoboCom.Monad                 (Event (NewBar, NewTick, NewTrade, OrderUpdate),
-                                                       MonadRobot (..), StrategyEnvironment (..))
+                                                       MonadRobot (..),
+                                                       StrategyEnvironment (..))
 import           ATrade.RoboCom.Persistence           (MonadPersistence)
 import           ATrade.RoboCom.Types                 (BarSeriesId (BarSeriesId),
                                                        Bars, TickerInfoMap)
-import           ATrade.Types                         (OrderId,
-                                                       OrderState, Trade, Tick (value))
+import           ATrade.Types                         (OrderId, OrderState,
+                                                       Tick (value), Trade)
 import           Colog                                (HasLog (getLogAction, setLogAction),
                                                        LogAction)
-import           Control.Concurrent                   (ThreadId, forkIO, killThread)
+import           Control.Concurrent                   (ThreadId, forkIO,
+                                                       killThread)
 import           Control.Concurrent.BoundedChan       (BoundedChan,
                                                        newBoundedChan, readChan,
                                                        writeChan)
 import           Control.Exception.Safe               (MonadThrow)
-import           Control.Monad                        (forM_, forever, void, when, forM)
+import           Control.Monad                        (forM, forM_, forever,
+                                                       void, when)
 import           Control.Monad.IO.Class               (MonadIO, liftIO)
 import           Control.Monad.Reader                 (MonadReader (local),
                                                        ReaderT, asks)
 import           Data.Aeson                           (FromJSON, ToJSON)
-import Data.Default ( Default )
+import           Data.Default                         (Default)
 import           Data.IORef                           (IORef,
                                                        atomicModifyIORef',
                                                        readIORef, writeIORef)
