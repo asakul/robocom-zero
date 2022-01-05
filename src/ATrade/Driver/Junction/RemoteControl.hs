@@ -98,13 +98,15 @@ handleRemoteControl timeout = do
   sock <- asks peRemoteControlSocket
   logger <- asks peLogAction
   evs <- poll (fromIntegral timeout) [Sock sock [In] Nothing]
-  unless (null evs) $ do
-    rawRequest <- liftIO $ receive sock
-    case parseRemoteControlRequest rawRequest of
-      Left err      -> logErrorWith logger "RemoteControl" ("Unable to parse request: " <> (T.pack . show) err)
-      Right request -> do
-        response <- handleRequest request
-        liftIO $ send sock [] (makeRemoteControlResponse response)
+  case evs of
+    (x:_) -> unless (null x) $ do
+      rawRequest <- liftIO $ receive sock
+      case parseRemoteControlRequest rawRequest of
+        Left err      -> logErrorWith logger "RemoteControl" ("Unable to parse request: " <> (T.pack . show) err)
+        Right request -> do
+          response <- handleRequest request
+          liftIO $ send sock [] (makeRemoteControlResponse response)
+    _ -> return ()
   where
     handleRequest (StartRobot inst)          = do
       startRobot inst
