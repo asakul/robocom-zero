@@ -9,7 +9,8 @@ module ATrade.Driver.Junction.JunctionMonad
     JunctionM(..),
     startRobot,
     saveRobots,
-    reloadConfig
+    reloadConfig,
+    getState
   ) where
 
 import           ATrade.Broker.Client                        (BrokerClientHandle)
@@ -63,6 +64,7 @@ import           Control.Monad.Reader                        (MonadIO (liftIO),
                                                               asks)
 import           Data.Aeson                                  (eitherDecode,
                                                               encode)
+import qualified Data.ByteString                             as B
 import qualified Data.ByteString.Lazy                        as BL
 import           Data.Default                                (Default (def))
 import           Data.Foldable                               (traverse_)
@@ -226,3 +228,15 @@ reloadConfig instId = flip catchAny (\_ -> return $ Left "Exception") $ do
             liftIO $ writeIORef (strategyConfig inst) (confStrategy bigConf))
       return $ Right ()
     Nothing -> return $ Left "Unable to load config"
+
+getState :: T.Text -> JunctionM (Either T.Text B.ByteString)
+getState instId = do
+  robotsMap' <- asks peRobots
+  robots <- liftIO $ readIORef robotsMap'
+  case M.lookup instId robots of
+    Just robot -> do
+      Right <$> onStrategyInstanceM robot
+        (\inst -> do
+            v <- liftIO $ readIORef (strategyState inst)
+            return $ BL.toStrict $ encode v)
+    Nothing -> return $ Left $ "Unknown robot: " <> instId

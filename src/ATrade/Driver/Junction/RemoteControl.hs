@@ -8,7 +8,7 @@ module ATrade.Driver.Junction.RemoteControl
   ) where
 
 import           ATrade.Driver.Junction.JunctionMonad     (JunctionEnv (peLogAction, peRemoteControlSocket, peRobots),
-                                                           JunctionM,
+                                                           JunctionM, getState,
                                                            reloadConfig,
                                                            startRobot)
 import           ATrade.Driver.Junction.RobotDriverThread (stopRobot)
@@ -35,12 +35,14 @@ import           UnliftIO                                 (MonadIO (liftIO),
 data RemoteControlResponse =
     ResponseOk
   | ResponseError T.Text
+  | ResponseData B.ByteString
   deriving (Show, Eq)
 
 data RemoteControlRequest =
     StartRobot StrategyInstanceDescriptor
   | StopRobot T.Text
   | ReloadConfig T.Text
+  | GetState T.Text
   | SetState T.Text B.ByteString
   | Ping
   deriving (Show)
@@ -57,6 +59,7 @@ parseRemoteControlRequest bs =
     | cmd == "START" -> parseStart
     | cmd == "STOP" -> parseStop
     | cmd == "RELOAD_CONFIG" -> parseReloadConfig
+    | cmd == "GET_STATE" -> parseGetState
     | cmd == "SET_STATE" -> parseSetState
     | cmd == "PING" -> Right Ping
     | otherwise -> Left UnknownCmd
@@ -76,6 +79,10 @@ parseRemoteControlRequest bs =
       Left _  -> Left UtfDecodeError
       Right r -> Right (ReloadConfig (T.strip r))
 
+    parseGetState = case decodeUtf8' (B.takeWhile (/= 0x20) rest) of
+      Left _  -> Left UtfDecodeError
+      Right r -> Right (GetState r)
+
     parseSetState = case decodeUtf8' (B.takeWhile (/= 0x20) rest) of
       Left _  -> Left UtfDecodeError
       Right r -> Right (SetState r (B.dropWhile (== 0x20) . B.dropWhile (/= 0x20) $ rest))
@@ -84,6 +91,7 @@ parseRemoteControlRequest bs =
 makeRemoteControlResponse :: RemoteControlResponse -> B.ByteString
 makeRemoteControlResponse ResponseOk          = "OK"
 makeRemoteControlResponse (ResponseError msg) = "ERROR " <> encodeUtf8 msg
+makeRemoteControlResponse (ResponseData d)    = "DATA\n" <> d
 
 handleRemoteControl :: Int -> JunctionM ()
 handleRemoteControl timeout = do
@@ -118,6 +126,11 @@ handleRemoteControl timeout = do
       case res of
         Left errmsg -> return $ ResponseError errmsg
         Right ()    -> return ResponseOk
+    handleRequest (GetState instId) = do
+      res <- getState instId
+      case res of
+        Left errmsg -> return $ ResponseError errmsg
+        Right d     -> return $ ResponseData d
     handleRequest (SetState instId rawState) = undefined
     handleRequest Ping                       = return ResponseOk
 
