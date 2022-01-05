@@ -10,7 +10,8 @@ module ATrade.Driver.Junction.JunctionMonad
     startRobot,
     saveRobots,
     reloadConfig,
-    getState
+    getState,
+    setState
   ) where
 
 import           ATrade.Broker.Client                        (BrokerClientHandle)
@@ -62,7 +63,8 @@ import           Control.Monad.Reader                        (MonadIO (liftIO),
                                                               MonadReader,
                                                               ReaderT (runReaderT),
                                                               asks)
-import           Data.Aeson                                  (eitherDecode,
+import           Data.Aeson                                  (decode,
+                                                              eitherDecode,
                                                               encode)
 import qualified Data.ByteString                             as B
 import qualified Data.ByteString.Lazy                        as BL
@@ -239,4 +241,19 @@ getState instId = do
         (\inst -> do
             v <- liftIO $ readIORef (strategyState inst)
             return $ BL.toStrict $ encode v)
+    Nothing -> return $ Left $ "Unknown robot: " <> instId
+
+setState :: T.Text -> B.ByteString -> JunctionM (Either T.Text ())
+setState instId newState = do
+  robotsMap' <- asks peRobots
+  robots <- liftIO $ readIORef robotsMap'
+  case M.lookup instId robots of
+    Just robot -> do
+      onStrategyInstanceM robot
+        (\inst -> do
+            case decode . BL.fromStrict $ newState of
+              Just newS -> do
+                liftIO $ writeIORef (strategyState inst) newS
+                return $ Right ()
+              Nothing -> return $ Left $ "Unable to decode state for " <> instId)
     Nothing -> return $ Left $ "Unknown robot: " <> instId

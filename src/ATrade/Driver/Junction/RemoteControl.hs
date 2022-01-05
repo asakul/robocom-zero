@@ -10,7 +10,7 @@ module ATrade.Driver.Junction.RemoteControl
 import           ATrade.Driver.Junction.JunctionMonad     (JunctionEnv (peLogAction, peRemoteControlSocket, peRobots),
                                                            JunctionM, getState,
                                                            reloadConfig,
-                                                           startRobot)
+                                                           setState, startRobot)
 import           ATrade.Driver.Junction.RobotDriverThread (stopRobot)
 import           ATrade.Driver.Junction.Types             (StrategyInstanceDescriptor)
 import           ATrade.Logging                           (Severity (Info),
@@ -128,12 +128,19 @@ handleRemoteControl timeout = do
       case res of
         Left errmsg -> return $ ResponseError errmsg
         Right ()    -> return ResponseOk
+
     handleRequest (GetState instId) = do
       res <- getState instId
       case res of
         Left errmsg -> return $ ResponseError errmsg
         Right d     -> return $ ResponseData d
-    handleRequest (SetState instId rawState) = undefined
+
+    handleRequest (SetState instId rawState) = do
+      res <- setState instId rawState
+      case res of
+        Left errmsg -> return $ ResponseError errmsg
+        Right ()    -> return ResponseOk
+
     handleRequest Ping                       = return ResponseOk
 
 
