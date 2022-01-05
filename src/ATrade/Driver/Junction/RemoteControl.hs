@@ -21,13 +21,15 @@ import           Control.Monad.Reader                     (asks)
 import           Data.Aeson                               (decode)
 import qualified Data.ByteString                          as B
 import qualified Data.ByteString.Lazy                     as BL
+import           Data.List.NonEmpty                       (NonEmpty ((:|)))
 import qualified Data.Map.Strict                          as M
 import qualified Data.Text                                as T
 import           Data.Text.Encoding                       (decodeUtf8',
                                                            encodeUtf8)
 import           System.ZMQ4                              (Event (In),
                                                            Poll (Sock), poll,
-                                                           receive, send)
+                                                           receiveMulti,
+                                                           sendMulti)
 import           UnliftIO                                 (MonadIO (liftIO),
                                                            atomicModifyIORef',
                                                            readIORef)
@@ -100,12 +102,15 @@ handleRemoteControl timeout = do
   evs <- poll (fromIntegral timeout) [Sock sock [In] Nothing]
   case evs of
     (x:_) -> unless (null x) $ do
-      rawRequest <- liftIO $ receive sock
-      case parseRemoteControlRequest rawRequest of
-        Left err      -> logErrorWith logger "RemoteControl" ("Unable to parse request: " <> (T.pack . show) err)
-        Right request -> do
-          response <- handleRequest request
-          liftIO $ send sock [] (makeRemoteControlResponse response)
+      frames <- liftIO $ receiveMulti sock
+      case frames of
+        [peerId, _, rawRequest] -> do
+          case parseRemoteControlRequest rawRequest of
+            Left err      -> logErrorWith logger "RemoteControl" ("Unable to parse request: " <> (T.pack . show) err)
+            Right request -> do
+              response <- handleRequest request
+              liftIO $ sendMulti sock $ peerId :| [B.empty, makeRemoteControlResponse response]
+        _ -> logErrorWith logger "RemoteControl" "Invalid incoming request"
     _ -> return ()
   where
     handleRequest (StartRobot inst)          = do

@@ -86,8 +86,8 @@ import           System.IO                                   (BufferMode (LineBu
                                                               IOMode (AppendMode),
                                                               hSetBuffering,
                                                               withFile)
-import           System.ZMQ4                                 (Rep (Rep), bind,
-                                                              withContext,
+import           System.ZMQ4                                 (Router (Router),
+                                                              bind, withContext,
                                                               withSocket)
 import           System.ZMQ4.ZAP                             (loadCertificateFromFile)
 import           UnliftIO                                    (MonadUnliftIO)
@@ -133,7 +133,7 @@ junctionMain descriptors = do
       handledNotifications <- newIORef S.empty
       withBroker cfg ctx robotsMap ordersMap handledNotifications globalLogger $ \bro ->
         withQThread downloaderEnv barsMap tickerInfoMap cfg ctx globalLogger $ \qt ->
-          withSocket ctx Rep $ \rcSocket -> do
+          withSocket ctx Router $ \rcSocket -> do
             liftIO $ bind rcSocket (T.unpack . remoteControlEndpoint $ cfg)
             broService <- mkBrokerService bro ordersMap
             let junctionLogAction = hoistLogAction liftIO globalLogger

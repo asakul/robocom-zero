@@ -92,7 +92,7 @@ import           System.IO                                   (BufferMode (LineBu
                                                               hSetBuffering,
                                                               openFile)
 import           System.IO                                   (hClose)
-import           System.ZMQ4                                 (Rep, Socket)
+import           System.ZMQ4                                 (Router, Socket)
 import           UnliftIO                                    (MonadUnliftIO)
 import           UnliftIO.Exception                          (catchAny,
                                                               onException)
@@ -105,7 +105,7 @@ data JunctionEnv =
     peQuoteThread          :: QuoteThreadHandle,
     peBroker               :: BrokerClientHandle,
     peRobots               :: IORef (M.Map T.Text RobotDriverHandle),
-    peRemoteControlSocket  :: Socket Rep,
+    peRemoteControlSocket  :: Socket Router,
     peLogAction            :: LogAction JunctionM Message,
     peIoLogAction          :: LogAction IO Message,
     peProgramConfiguration :: ProgramConfiguration,
