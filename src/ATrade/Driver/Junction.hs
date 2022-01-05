@@ -160,7 +160,7 @@ junctionMain descriptors = do
                 notifications <- liftIO $ getNotifications broService
                 forM_ notifications (liftIO . handleBrokerNotification robotsMap ordersMap handledNotifications globalLogger)
                 saveRobots
-                handleRemoteControl 1000000
+                handleRemoteControl 1000
   where
     startRobots :: ProgramConfiguration -> JunctionM ()
     startRobots cfg = forM_ (instances cfg) $ \inst -> do
