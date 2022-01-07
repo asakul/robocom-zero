@@ -72,8 +72,8 @@ module ATrade.RoboCom.Positions
   calculateSizeIVSWith,
   calculateSizeFixed,
   calculateSizeFixedCash,
-  calculateSizeFixedCashWith
-) where
+  calculateSizeFixedCashWith,
+  calculateSizeIVSWithMinimum) where
 
 import           GHC.Generics
 
@@ -81,7 +81,7 @@ import           ATrade.RoboCom.Monad
 import           ATrade.RoboCom.Types
 import           ATrade.Types
 
-import           Control.Lens
+import           Control.Lens hiding (op)
 import           Control.Monad
 
 import           ATrade.Logging            (Severity (Trace, Warning))
@@ -164,8 +164,14 @@ calculateSizeIVS :: (HasField "riskSize" a Double,
 
 calculateSizeIVS cfg = calculateSizeIVSWith (getField @"atrPeriod" cfg) (getField @"riskSize" cfg) (getField @"stopSize" cfg) cfg
 
+calculateSizeIVSWithMinimum :: (HasField "riskSize" a Double,
+                     HasField "stopSize" a Double,
+                     HasField "atrPeriod" a Int) =>
+  Int -> a -> BarSeries -> Operation -> Int
+calculateSizeIVSWithMinimum minVolume cfg series op = max (calculateSizeIVS cfg series op) minVolume
+
 calculateSizeIVSWith :: Int -> Double -> Double -> a -> BarSeries -> Operation -> Int
-calculateSizeIVSWith atrPeriod riskSize stopSize cfg series _ =
+calculateSizeIVSWith atrPeriod riskSize stopSize _ series _ =
   let atr = I.atr atrPeriod (bsBars series) in
     truncate (riskSize / (atr * stopSize))
 
