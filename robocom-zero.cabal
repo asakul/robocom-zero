@@ -26,7 +26,7 @@ library
                      , ATrade.Quotes
                      , ATrade.Quotes.QHP
                      , ATrade.Quotes.QTIS
---                     , ATrade.Driver.Backtest
+                     , ATrade.Driver.Backtest
                      , ATrade.Driver.Junction
                      , ATrade.Driver.Junction.Types
                      , ATrade.Driver.Junction.QuoteThread
@@ -76,6 +76,9 @@ library
                      , co-log
                      , text-show
                      , unliftio
+                     , conduit
+                     , split
+                     , cassava
                      
   default-language:    Haskell2010
   other-modules:       ATrade.Exceptions

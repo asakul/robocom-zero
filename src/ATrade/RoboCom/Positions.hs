@@ -223,20 +223,23 @@ orderDeadline maybeDeadline lastTs =
 
 
 dispatchPosition :: (StateHasPositions s, MonadRobot m c s) => Event -> Position -> m Position
-dispatchPosition event pos = case posState pos of
-  PositionWaitingOpenSubmission pendingOrder -> handlePositionWaitingOpenSubmission pendingOrder
-  PositionWaitingOpen -> handlePositionWaitingOpen
-  PositionOpen -> handlePositionOpen
-  PositionWaitingPendingCancellation -> handlePositionWaitingPendingCancellation
-  PositionWaitingCloseSubmission pendingOrder -> handlePositionWaitingCloseSubmission pendingOrder
-  PositionWaitingClose -> handlePositionWaitingClose
-  PositionClosed -> handlePositionClosed pos
-  PositionCancelled -> handlePositionCancelled pos
+dispatchPosition event pos =
+  case posState pos of
+    PositionWaitingOpenSubmission pendingOrder -> handlePositionWaitingOpenSubmission pendingOrder
+    PositionWaitingOpen -> handlePositionWaitingOpen
+    PositionOpen -> handlePositionOpen
+    PositionWaitingPendingCancellation -> handlePositionWaitingPendingCancellation
+    PositionWaitingCloseSubmission pendingOrder -> handlePositionWaitingCloseSubmission pendingOrder
+    PositionWaitingClose -> handlePositionWaitingClose
+    PositionClosed -> handlePositionClosed pos
+    PositionCancelled -> handlePositionCancelled pos
   where
     handlePositionWaitingOpenSubmission pendingOrder = do
       lastTs <- view seLastTimestamp <$> getEnvironment
       if orderDeadline (posSubmissionDeadline pos) lastTs
-        then return $ pos { posState = PositionCancelled } -- TODO call TimeoutHandler if present
+        then do
+          appendToLog Warning $ [t|Submission deadline: %?, %?|] lastTs (posSubmissionDeadline pos)
+          return $ pos { posState = PositionCancelled } -- TODO call TimeoutHandler if present
         else case event of
           OrderUpdate oid Submitted -> do
             return $ if orderId pendingOrder == oid

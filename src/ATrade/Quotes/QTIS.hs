@@ -37,9 +37,8 @@ instance ToJSON TickerInfo where
     "lot_size" .= tiLotSize ti,
     "tick_size" .= tiTickSize ti ]
 
-qtisGetTickersInfo :: (WithLog env Message m, MonadIO m) => Context -> T.Text -> TickerId -> m TickerInfo
+qtisGetTickersInfo :: (MonadIO m) => Context -> T.Text -> TickerId -> m TickerInfo
 qtisGetTickersInfo ctx endpoint tickerId = do
-  logInfo "QTIS" $ "Requesting ticker: " <> tickerId <> " from " <> endpoint
   liftIO $ withSocket ctx Req $ \sock -> do
     connect sock $ T.unpack endpoint
     send sock [] $ BL.toStrict tickerRequest
