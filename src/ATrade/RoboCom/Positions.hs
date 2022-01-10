@@ -661,23 +661,32 @@ exitAtLimit :: (StateHasPositions s, MonadRobot m c s) => NominalDiffTime -> Pri
 exitAtLimit timeToCancel price position operationSignalName = do
   lastTs <- view seLastTimestamp <$> getEnvironment
   inst <- view seInstanceId <$> getEnvironment
-  case posCurrentOrder position of
-    Just order -> cancelOrder (orderId order)
-    Nothing    -> doNothing
-  oid <- submitOrder (closeOrder inst)
-  appendToLog Trace $ [t|exitAtLimit: %?, deadline: %?|] (posTicker position) (timeToCancel `addUTCTime` lastTs)
-  modifyPosition (\pos ->
-    pos { posCurrentOrder = Nothing,
-      posState = PositionWaitingCloseSubmission (closeOrder inst) { orderId = oid },
-      posNextState = Just PositionClosed,
-      posSubmissionDeadline = Just $ 10 `addUTCTime` lastTs,
-      posExecutionDeadline = Just $ timeToCancel `addUTCTime` lastTs }) position
+  cfg <- getConfig
+  (BarSeriesId tid tf) <- getFirstTickerId
+  maybeSeries <- getTicker tid tf
+  case maybeSeries of
+    Just series -> do
+      let roundedPrice = roundTo (ipTickSize . bsParams $ series) price
+      case posCurrentOrder position of
+        Just order -> cancelOrder (orderId order)
+        Nothing    -> doNothing
+      oid <- submitOrder (closeOrder inst roundedPrice)
+      appendToLog Trace $ [t|exitAtLimit: %?, deadline: %?|] (posTicker position) (timeToCancel `addUTCTime` lastTs)
+      modifyPosition (\pos ->
+        pos { posCurrentOrder = Nothing,
+          posState = PositionWaitingCloseSubmission (closeOrder inst roundedPrice) { orderId = oid },
+          posNextState = Just PositionClosed,
+          posSubmissionDeadline = Just $ 10 `addUTCTime` lastTs,
+          posExecutionDeadline = Just $ timeToCancel `addUTCTime` lastTs }) position
+    Nothing -> do
+      appendToLog Warning $ "Unable to locate first bar series"
+      return position
   where
-    closeOrder inst = mkOrder {
+    closeOrder inst roundedPrice = mkOrder {
       orderAccountId = posAccount position,
       orderSecurity = posTicker position,
       orderQuantity = (abs . posBalance) position,
-      orderPrice = Limit price,
+      orderPrice = Limit roundedPrice,
       orderOperation = if posBalance position > 0 then Sell else Buy,
       orderSignalId = SignalId inst operationSignalName ""
     }
